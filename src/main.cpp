@@ -1,8 +1,10 @@
+#include <Arduino.h>
+
 // Helpful resources:
 // 1. Set up VSCode environment with automatic pin detection, get configuration tips.
 //     https://www.youtube.com/watch?v=XLQa1sX9KIk
 //     If you just want to use Linux, skip this video.
-//     This project uses espidf instead of Ardiuno for the framework, for C/C++ RTOS practice.
+//     Use Arduino as framework to get access to Arduino helpers (and most tutorials are written in it)
 //     >Tasks: Run Build Task -> PlatformIO: Build
 //     >PlatformIO: Upload
 //     >PlatformIO: Serial Monitor
@@ -40,22 +42,22 @@
 //#define PIN_BUTTON_CONFIRM_OUT GND
 #define PIN_BUTTON_DOWN_IN ((gpio_num_t) GPIO_NUM_32)
 //#define PIN_BUTTON_DOWN_OUT GND
+const gpio_num_t button_in_pins[] = {PIN_BUTTON_UP_IN, PIN_BUTTON_CONFIRM_IN, PIN_BUTTON_DOWN_IN};
 
 // Create link so C can find app_main function from C++ file
 // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/cplusplus.html
-extern "C" void app_main()
+//extern "C" void app_main()
+void setup()
 {
-    // Get name of this task
-    // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/search.html?q=pcTaskGetName
-    char *task_name = pcTaskGetName(/*TaskHandle_t xTaskToQuery = */ NULL);
-    
+    // Initialize Arduino serial console
+    Serial.begin(115200);
+
     // Set up 3 GPIO buttons
     // While these buttons are pressed, they will be LOW(0), otherwise they stay HIGH(1)
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/log.html
     // https://esp32tutorials.com/esp32-push-button-esp-idf-digital-input/
     // https://esp32io.com/tutorials/esp32-button
-    gpio_num_t button_in_pins[] = {PIN_BUTTON_UP_IN, PIN_BUTTON_CONFIRM_IN, PIN_BUTTON_DOWN_IN};
     for(size_t i = 0; i < (sizeof(button_in_pins) / sizeof(*button_in_pins)); ++i)
     {
         // Clean pre-existing state of this pin
@@ -68,9 +70,11 @@ extern "C" void app_main()
         ESP_ERROR_CHECK(gpio_set_pull_mode(
             /* gpio_num_t gpio_num = */ button_in_pins[i],
             /* gpio_pull_mode_t pull = */ GPIO_PULLUP_ONLY));
+#if 0
         ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_dump_io_configuration(
             /* FILE *out_stream = */ stdout,
             /* uint64_t io_bit_mask = */ (1UL << button_in_pins[i])));
+#endif
 
         // TODO: hook up to interrupts to button presses
         // esp_err_t gpio_intr_enable(gpio_num_t gpio_num)
@@ -79,31 +83,27 @@ extern "C" void app_main()
         // esp_err_t gpio_install_isr_service(int intr_alloc_flags)
         // ...
     }
+}
 
+void loop()
+{
     // Forever...
-    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/log.html
+    // https://www.arduino.cc/reference/en/language/functions/communication/serial
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
-    while(1)
+    // Print "Hello world!" to the serial console
+    Serial.println("Hello world!");
+
+    // Show button push status
+    for(size_t i = 0; i < (sizeof(button_in_pins) / sizeof(*button_in_pins)); ++i)
     {
-        // Print "Hello world!" to the information serial console
-        ESP_LOGI(
-            /*const char *tag = */ task_name,
-            /*const char *format = */ "Hello world!"
-        );
-
-        // Show button push status
-        for(size_t i = 0; i < (sizeof(button_in_pins) / sizeof(*button_in_pins)); ++i)
-        {
-            ESP_LOGI(
-                /* const char *tag = */ task_name,
-                /* const char *format = */ "GPIO pin %d: %d",
-                /* __VA_ARGS__ */ button_in_pins[i],
-                /* __VA_ARGS__ */ gpio_get_level(/* gpio_num_t gpio_num = */ button_in_pins[i])
-            );
-        }
-
-        // Yield task for 5 seconds to avoid triggering the watchdog
-        vTaskDelay(/*const TickType_t xTicksToDelay = */MS_TO_CLOCK_TICK(2000));
+        Serial.print("GPIO pin ");
+        Serial.print(button_in_pins[i], DEC);
+        Serial.print(": ");
+        Serial.print(gpio_get_level(/* gpio_num_t gpio_num = */ button_in_pins[i]), DEC);
+        Serial.println("");
     }
+
+    // Yield task for 5 seconds to avoid triggering the watchdog
+    vTaskDelay(/*const TickType_t xTicksToDelay = */MS_TO_CLOCK_TICK(2000));
 }
