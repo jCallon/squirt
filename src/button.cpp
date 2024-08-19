@@ -2,14 +2,33 @@
 #include "button.h"
 // TODO: comment
 #include <Arduino.h>
-// Include FreeRTOS OS API
-#include "freertos/FreeRTOS.h"
-// Include FreeRTOS task handling API
-//#include "freeRTOS/task.h"
 
 // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
 // https://esp32tutorials.com/esp32-push-button-esp-idf-digital-input/
 // https://esp32io.com/tutorials/esp32-button
+
+// Instantiate instance of buttons
+Button buttons[NUM_BUTTONS] = {
+    { 
+        /* bool arg_is_pull_up = */ true,
+        /* uint8_t arg_ms_debounce = */ 50,
+        /* gpio_num_t arg_pin_in = */ PIN_BUTTON_UP_IN
+    },
+    { 
+        /* bool arg_is_pull_up = */ true,
+        /* uint8_t arg_ms_debounce = */ 50,
+        /* gpio_num_t arg_pin_in = */ PIN_BUTTON_CONFIRM_IN
+    },
+    { 
+        /* bool arg_is_pull_up = */ true,
+        /* uint8_t arg_ms_debounce = */ 50,
+        /* gpio_num_t arg_pin_in = */ PIN_BUTTON_DOWN_IN
+    }
+};
+
+// Declare static functions
+static void task_read_button_press();
+static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin);
 
 // TODO: In the future, 'button' events may not be from buttons, but also from WiFi and Bluetooth.
 //       This is a poor way to handle the button queue, but it works for now.
@@ -34,10 +53,42 @@ void init_gpio()
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/intr_alloc.html
     ESP_ERROR_CHECK(gpio_install_isr_service(/* int intr_alloc_flags = */ ESP_INTR_FLAG_LEVEL1 | ESP_INTR_FLAG_EDGE | ESP_INTR_FLAG_LOWMED));
+
+    // Set up GPIO buttons
+    for(size_t i = 0; i < NUM_BUTTONS; ++i)
+    {
+        buttons[i].register_pin();
+        buttons[i].register_intr();
+    }
+
+#if 0
+    // Arduino framework no likey
+    ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_dump_io_configuration(
+        /* FILE *out_stream = */ stdout,
+        /* uint64_t io_bit_mask = */ (1UL << button_in_pins[i])));
+#endif
+
+    // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
+    //       Check return value (TaskFunction_t)
+    xTaskCreate(
+        // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
+        /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_button_press,
+        // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
+        /* const char *const pcName = */ "read_gpio_queue",
+        // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        // Pointer that will be used as the parameter for the task being created.
+        /* void *const pvParameters = */ NULL,
+        // The priority at which the task should run.
+        // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
+        // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
+        /* UBaseType_t uxPriority = */ 10,
+        // Used to pass back a handle by which the created task can be referenced.
+        /* TaskHandle_t *const pxCreatedTask = */ NULL);
 }
 
 // TODO: Check stack/heap size.
-void task_read_button_press()
+static void task_read_button_press()
 {
     // Get GPIO pin number from queue holding all button presses
     gpio_num_t gpio_pin = GPIO_NUM_0;
@@ -86,6 +137,27 @@ void task_read_button_press()
 // https://github.com/espressif/esp-idf/blob/v5.3/examples/peripherals/gpio/generic_gpio/main/gpio_example_main.c
 static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
 {
+    // TODO: This code is gross and error prone
+    Button *button = NULL;
+    switch(gpio_pin)
+    {
+        case PIN_BUTTON_UP_IN:
+            button = &buttons[0];
+            break;
+        case PIN_BUTTON_CONFIRM_IN:
+            button = &buttons[1];
+            break;
+        case PIN_BUTTON_DOWN_IN:
+            button = &buttons[2];
+            break;
+        default:
+            return;
+    }
+    if(false == button->is_button_press())
+    {
+        return;
+    }
+
     // Write GPIO pin number to queue holding all button presses
     // Remember, non-ISR queue access is not safe from within interrupts!
     xQueueSendFromISR(
@@ -107,13 +179,15 @@ Button::Button(
     uint8_t arg_ms_debounce,
     gpio_num_t arg_pin_in)
 {
+    is_pressed = false;
     is_pull_up = arg_is_pull_up;
     ms_debounce = arg_ms_debounce;
     pin_in = arg_pin_in;
     ms_next_valid_edge = 0;
     // Mutex type semaphores cannot be used from within intrrupt service routines.
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/system/freertos_idf.html
-    //mutex = xSemaphoreCreateMutexStatic(&mutex_buffer);
+    // TODO: look into 'direct to task notification'
+    //mutex_handle = xSemaphoreCreateBinaryStatic(&mutex_buffer);
 }
 
 void Button::register_pin()
@@ -152,24 +226,43 @@ void Button::register_intr()
 
 bool Button::is_button_press()
 {
-    // Store result of check
-    bool status = false;
+    // This button press logic is flawed, but good enough for now.
+    // User IO is not the main concern of this system, or FreeRTOS generally.
+    // Ex:
+    // HI _____                   _____
+    // LO      \/\/\/\_____/\/\/\/
+    // 0) assume all buttons start unpressed and in HIGH
+    // 1) set the button as pressed once the first static happens
+    // 2) ignore static for next X ms
+    // 3) set button as unpressed once the first static happens
+    // 4) ignore static for the next X ms
+    // 5) repeat starting from 2
+
     // Get the current time in milliseconds
     unsigned long ms_current_time = millis();
 
     // Only allow one thread to read/modify this button's members at a time
-    //mutex.lock();
-
-    // If the current time is at or past the time this edge is no longer considered noise...
-    if (ms_current_time >= ms_next_valid_edge)
+    // If the semaphore is not available, wait 25 ticks to see if it becomes free
+#if 0
+    if ((NULL != mutex_handle) &&
+        (pdTRUE == xSemaphoreTakeFromISR(
+            /* xSemaphore = */ mutex_handle,
+            /* xBlockTime = */ TickType_t(25))))
     {
-        // Update when the next edge trasition is no longer considered noise
-        ms_next_valid_edge = ms_current_time + ms_debounce;
-        status = true;
+#endif
+        // If the current time is at or past the time this edge is no longer considered noise...
+        if (ms_current_time >= ms_next_valid_edge)
+        {
+            // Update when the next edge trasition is no longer considered noise
+            ms_next_valid_edge = ms_current_time + ms_debounce;
+            is_pressed = !is_pressed;
+        }
+
+#if 0
+        // Free sempahore so other threads can read/modify this button's members
+        xSemaphoreGiveFromISR(mutex_handle);
     }
+#endif
 
-    // Free lock so other threads can read/modify this button's members
-    //mutex.unlock();
-
-    return status;
+    return is_pressed;
 }

@@ -45,23 +45,6 @@
 // Initialize useful data structures //
 // ================================= //
 // Initialize peripherals
-Button buttons[NUM_BUTTONS] = {
-    { 
-        /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
-        /* gpio_num_t arg_pin_in = */ PIN_BUTTON_UP_IN
-    },
-    { 
-        /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
-        /* gpio_num_t arg_pin_in = */ PIN_BUTTON_CONFIRM_IN
-    },
-    { 
-        /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
-        /* gpio_num_t arg_pin_in = */ PIN_BUTTON_DOWN_IN
-    }
-};
 LiquidCrystal_I2C display(
     /* uint8_t lcd_Addr = */ 0x27, // << This depends on your display, see your manufaturer notes!
     /* uint8_t lcd_cols = */ 20,
@@ -102,38 +85,6 @@ void setup()
 
     // Initialize the GPIO button press queue and enable per-pin interrupts
     init_gpio();
-
-    // Set up GPIO buttons
-    for(size_t i = 0; i < NUM_BUTTONS; ++i)
-    {
-        buttons[i].register_pin();
-        buttons[i].register_intr();
-    }
-
-#if 0
-// Arduino framework no likey
-    ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_dump_io_configuration(
-        /* FILE *out_stream = */ stdout,
-        /* uint64_t io_bit_mask = */ (1UL << button_in_pins[i])));
-#endif
-
-    // TODO: Look into static memory instead of heap memory task creation, better? Better arugments?
-    //       Check return value (TaskFunction_t)
-    xTaskCreate(
-        // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
-        /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_button_press,
-        // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
-        /* const char *const pcName = */ "read_gpio_queue",
-        // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
-        // Pointer that will be used as the parameter for the task being created.
-        /* void *const pvParameters = */ NULL,
-        // The priority at which the task should run.
-        // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
-        // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
-        /* UBaseType_t uxPriority = */ 10,
-        // Used to pass back a handle by which the created task can be referenced.
-        /* TaskHandle_t *const pxCreatedTask = */ NULL);
 }
 
 // Don't have any need for a loop that runs forever, because we're using FreeRTOS tasks,

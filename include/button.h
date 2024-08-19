@@ -3,6 +3,8 @@
 
 // TODO: comment
 #include "driver/gpio.h"
+// Include FreeRTOS task handling API
+//#include "freeRTOS/task.h"
 
 // Each button is connected to GND, in a pull-up resistor fashion (LOW = 0 = pressed, HIGH = 1 = not pressed)
 // These defines aren't the state of a button, simply:
@@ -20,8 +22,6 @@
 
 // Initialize the GPIO button press queue and enable per-pin interrupts
 void init_gpio();
-// Define a task that reads from the button press queue
-void task_read_button_press();
 
 class Button
 {
@@ -39,6 +39,8 @@ class Button
         bool is_button_press();
 
     private:
+        // TODO: comment
+        bool is_pressed;
         // Whether the button is pull-up or pull-down.
         // If the button is pull-up, its default state is HIGH (1), and its pressed state is LOW (0).
         // If the button is not pull-up, it is pull-down, and its default state is is LOW (0), and its pressed state is HIGH (1).
@@ -56,7 +58,7 @@ class Button
         unsigned long ms_next_valid_edge;
         // TODO: look into mutexes
         // A mutual exlusion to apply when only onw thread should be able to access something at a time.
-        //SemaphoreHandle_t mutex;
+        //SemaphoreHandle_t mutex_handle;
         // A statically allocated buffer for the semaphore to live in
         //StaticSemaphore_t mutex_buffer;
 };
