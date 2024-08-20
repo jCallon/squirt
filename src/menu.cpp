@@ -34,16 +34,21 @@ const uint8_t water_emoji = {
     0b11111,
     0b01110,
 };
+
+// Define custom character for water emoji
+// represented in the display example below as X
+const uint8_t full_right_arrow_emoji = {
+    0b01000,
+    0b01100,
+    0b01110,
+    0b01111,
+    0b01110,
+    0b01100,
+    0b01000,
+    0b00000,
+};
 #endif
 
-// -------------------- //
-// > Goal X: 50%        //
-//   X freq: 1000 min   //
-//   Last X: 08:00 AM   //
-//   Next X: 12:00 PM   //
-//   Check X            //
-//   Trigger spray      //
-// -------------------- //
 // TODO: properly define functions and such for all of these
 static MenuLine menu_lines[] = 
 {
@@ -83,6 +88,13 @@ static MenuLine menu_lines[] =
         /* void (*arg_func_on_confirm)() = */ nullptr,
         /* void (*arg_func_on_down)() = */ nullptr
     }
+};
+
+// Create an instance of a menu
+// TODO: use a #define or someting better than hard-coding this value
+static Menu menu = {
+    /* MenuLine *arg_menu_lines = */ menu_lines,
+    /* size_t arg_num_menu_lines = */ 6
 };
 
 // =================================================== //
@@ -180,21 +192,7 @@ static void task_read_menu_input_queue()
             /* TickType_t xTicksToWait */ portMAX_DELAY))
         {
             // Depending on the button in the queue, print a different message
-            switch(menu_input)
-            {
-                case MENU_INPUT_UP:
-                    Serial.println("Read menu UP input");
-                    break;
-                case MENU_INPUT_CONFIRM:
-                    Serial.println("Read menu CONFIRM input");
-                    break;
-                case MENU_INPUT_DOWN:
-                    Serial.println("Read menu DOWN input");
-                    break;
-                default:
-                    Serial.println("Read unrecognized menu input, will do nothing with it");
-                    break;
-            }
+            menu.react_to_menu_input(/* MENU_INPUT_t menu_input = */ menu_input);
         }
     }
 }
@@ -206,9 +204,9 @@ static void task_read_menu_input_queue()
 MenuLine::MenuLine(
     char *arg_str_display,
     //void (*arg_to_str)(),
-    void (*arg_func_on_up)(),
-    void (*arg_func_on_confirm)(),
-    void (*arg_func_on_down)())
+    bool (*arg_func_on_up)(),
+    bool (*arg_func_on_confirm)(),
+    bool (*arg_func_on_down)())
 {
     str_display_has_changed = true;
     str_display = arg_str_display;
@@ -217,10 +215,10 @@ MenuLine::MenuLine(
     func_on_down = arg_func_on_down;
 }
 
-void MenuLine::react_to_button_press(MENU_INPUT_t input)
+bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
 {
     // Get the function to call based on the input received
-    void (*func_to_call)() = nullptr;
+    bool (*func_to_call)() = nullptr;
     switch(input)
     {
         case MENU_INPUT_UP:
@@ -239,11 +237,11 @@ void MenuLine::react_to_button_press(MENU_INPUT_t input)
     // If there is not a function defined for this input, do nothing
     if (nullptr == func_to_call)
     {
-        return;
+        return true;
     }
 
     // Call the function
-    (*func_to_call)();
+    return (*func_to_call)();
 }
 
 bool MenuLine::get_str(char **arg_str)
@@ -258,9 +256,98 @@ bool MenuLine::get_str(char **arg_str)
 // Menu member functions //
 // ===================== //
 
-Menu::Menu(MenuLine *arg_menu_lines)
+Menu::Menu(
+    MenuLine *arg_menu_lines,
+    size_t arg_num_menu_lines)
 {
     menu_lines = arg_menu_lines;
+    num_menu_lines = arg_num_menu_lines;
     index_menu_item_hover = 0;
     is_menu_item_selected = false;
+}
+
+void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
+{
+    // If a menu item is currently selected, use its handlers for button inputs
+    if(true == is_menu_item_selected)
+    {
+        // The menu line handler tells if after this button press, the menu should consume inputs again instead of the menu line
+        is_menu_item_selected = !(menu_lines[index_menu_item_hover].react_to_menu_input(menu_input));
+    }
+    else
+    {
+        // This menu input goes to the menu, not a menu line
+        switch(menu_input)
+        {
+            case MENU_INPUT_UP:
+                Serial.println("Read menu UP input");
+                index_menu_item_hover = (index_menu_item_hover == 0) ? (num_menu_lines - 1) : (index_menu_item_hover - 1);
+                break;
+            case MENU_INPUT_CONFIRM:
+                Serial.println("Read menu CONFIRM input");
+                is_menu_item_selected = true;
+                break;
+            case MENU_INPUT_DOWN:
+                Serial.println("Read menu DOWN input");
+                index_menu_item_hover = (index_menu_item_hover == (num_menu_lines - 1)) ? (0) : (index_menu_item_hover + 1);
+                break;
+            default:
+                Serial.println("Read unrecognized menu input, will do nothing with it");
+                break;
+        }
+    }
+
+    // Update the display
+    // TODO: Don't update per every input?
+    //       If the inputs were really fast after one-another, their operations can be combined,
+    //       then the display is updated again to save the number of times the function is called.
+    update_display();
+}
+
+// TODO: Do it need to put a mutex lock around this? Altough seeing things glitch around would be pretty fun...
+void Menu::update_display()
+{
+    // Here is an example of a 20x4 display.
+    // In this example, X is a custom water-drip character, and # is a custom right-arrow character
+    // -------------------- //
+    // # Goal X: 50%        //
+    //   X freq: 1000 min   //
+    //   Last X: 08:00 AM   //
+    //   Next X: 12:00 PM   //
+    // -------------------- //
+
+    // TODO: Is there a way to batch together display updates and send them all out at once instead?
+
+    // Clear characters already on display
+    display.clear();
+
+    // Display cursor
+    display.setCursor(
+        /* uint8_t col = */ 0,
+        /* uint8_t row = */ 0
+    );
+    display.print(/* const char *c = */ is_menu_item_selected ? "#" : ">");
+
+    // Display menu lines
+    // TODO: use #define or varaible to hold number of lines in the display
+    if (0 == num_menu_lines)
+    {
+        return;
+    }
+    char *menu_line_str = nullptr;
+    for(size_t line_num = 0; line_num < 4; ++line_num)
+    {
+        // Set the cursor
+        display.setCursor(
+            /* uint8_t col = */ 2,
+            /* uint8_t row = */ line_num
+        );
+
+        // Get the menu line as a string, put it onto the screen
+        (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
+        if(nullptr != menu_line_str)
+        {
+            display.print(/* const char *c = */ menu_line_str);
+        }
+    }
 }
