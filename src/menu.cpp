@@ -21,23 +21,32 @@ LiquidCrystal_I2C display(
     /* uint8_t lcd_rows = */ 4
 );
 
-#if 0
-// Define custom character for water emoji
-// represented in the display example below as X
-const uint8_t water_emoji = {
-    0b00100,
-    0b00100,
-    0b01110,
-    0b01110,
-    0b11111,
-    0b11111,
-    0b11111,
-    0b01110,
+// See here for defining custom characters:
+// https://lastminuteengineers.com/esp32-i2c-lcd-tutorial/
+enum CUSTOM_CHAR_t : uint8_t
+{
+    CUSTOM_CHAR_NONE = 0,
+    CUSTOM_CHAR_WATER_DROP,
+    CUSTOM_CHAR_FILLED_RIGHT_ARROW,
+    CUSTOM_CHAR_MAX
 };
 
 // Define custom character for water emoji
 // represented in the display example below as X
-const uint8_t full_right_arrow_emoji = {
+byte custom_char_water_drop[] = {
+    0b00100,
+    0b01110,
+    0b01110,
+    0b11111,
+    0b11111,
+    0b11111,
+    0b01110,
+    0b00000,
+};
+
+// Define custom character for water emoji
+// represented in the display example below as X
+byte custom_char_filled_right_arrow[] = {
     0b01000,
     0b01100,
     0b01110,
@@ -47,7 +56,6 @@ const uint8_t full_right_arrow_emoji = {
     0b01000,
     0b00000,
 };
-#endif
 
 // TODO: properly define functions and such for all of these
 static MenuLine menu_lines[] = 
@@ -120,6 +128,11 @@ void init_menu()
         /* uint8_t row = */ 0
     );
     display.print(/* const char *c = */ "Hello world!");
+
+    // Register custom characters
+    // TODO: Use water character. By having a menu line not hold a string, but write to the screen itself? Or can they be passed in print?
+    display.createChar(CUSTOM_CHAR_WATER_DROP, custom_char_water_drop);
+    display.createChar(CUSTOM_CHAR_FILLED_RIGHT_ARROW, custom_char_filled_right_arrow);
 
     // Set queue_handle_menu_input to point to a queue capable of holding 10 menu inputs
     menu_input_queue_handle = xQueueCreate(
@@ -326,7 +339,14 @@ void Menu::update_display()
         /* uint8_t col = */ 0,
         /* uint8_t row = */ 0
     );
-    display.print(/* const char *c = */ is_menu_item_selected ? "#" : ">");
+    if(true == is_menu_item_selected)
+    {
+        display.write(/* uint8_t = */ CUSTOM_CHAR_FILLED_RIGHT_ARROW);
+    }
+    else
+    {
+        display.print(/* const char *c = */ ">");
+    }
 
     // Display menu lines
     // TODO: use #define or varaible to hold number of lines in the display
