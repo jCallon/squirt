@@ -15,27 +15,21 @@
 // Include external libraries //
 // ========================== //
 
-// TODO: comment
+// Include Arduino APIs
 #include <Arduino.h>
+// Include Arduino-dependant I2C LED API
+#include <LiquidCrystal_I2C.h>
 // Include FreeRTOS OS API
 #include "freertos/FreeRTOS.h"
-// Include FreeRTOS task handling API
-#include "freeRTOS/task.h"
-// TODO: comment
-#include "driver/gpio.h"
-// TODO: comment
-#include <LiquidCrystal_I2C.h>
-//TODO: comment
+// Include custom button class implementation
 #include "button.h"
 
 // ===================== //
 // Declare useful macros //
 // ===================== //
 
-// Create macro for converting milliseconds to clock ticks
-#define MS_TO_CLOCK_TICK(ms) ms / portTICK_PERIOD_MS
-
 // Define what pins are mapped to what peripherals
+// See button.h for more
 //#define PIN_I2C_DISPLAY_GND GND
 //#define PIN_I2C_DISPLAY_VCC VIN
 #define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_27)
@@ -44,16 +38,13 @@
 // ================================= //
 // Initialize useful data structures //
 // ================================= //
+
 // Initialize peripherals
 LiquidCrystal_I2C display(
     /* uint8_t lcd_Addr = */ 0x27, // << This depends on your display, see your manufaturer notes!
     /* uint8_t lcd_cols = */ 20,
     /* uint8_t lcd_rows = */ 4
 );
-
-// ============================================ //
-// Declare tasks and interrupts for peripherals //
-// ============================================ //
 
 // =========================== //
 // Initialize and start device //

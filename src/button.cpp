@@ -1,11 +1,17 @@
-//TODO: comment
-#include "button.h"
-// TODO: comment
-#include <Arduino.h>
+// Helpful resources:
+// 1. ESP32 GPIO Reference, which includes an example of how to connect interrupts to signal changes.
+//    https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
+// 2. A tutorial on how to set up a button using C.
+//    https://esp32tutorials.com/esp32-push-button-esp-idf-digital-input/
+// 3. A tutorial on how to set up buttons using the Arduino API.
+//    https://esp32io.com/tutorials/esp32-button
+// 4. A tutorial on how to debounce your buttons.
+//    https://esp32io.com/tutorials/esp32-button-debounce
 
-// https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html
-// https://esp32tutorials.com/esp32-push-button-esp-idf-digital-input/
-// https://esp32io.com/tutorials/esp32-button
+// Include Arduino APIs
+#include <Arduino.h>
+// Include custom button class implementation
+#include "button.h"
 
 // Instantiate instance of buttons
 Button buttons[NUM_BUTTONS] = {
@@ -153,6 +159,7 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
         default:
             return;
     }
+    // Do not add this button press to the queue if it was jsut static noise
     if(false == button->is_button_press())
     {
         return;
@@ -186,7 +193,8 @@ Button::Button(
     ms_next_valid_edge = 0;
     // Mutex type semaphores cannot be used from within intrrupt service routines.
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/system/freertos_idf.html
-    // TODO: look into 'direct to task notification'
+    // TODO: Look into 'direct to task notification'
+    //       See if a mtuex actually helps the reliability of the debounce code
     //mutex_handle = xSemaphoreCreateBinaryStatic(&mutex_buffer);
 }
 
@@ -236,7 +244,7 @@ bool Button::is_button_press()
     // 2) ignore static for next X ms
     // 3) set button as unpressed once the first static happens
     // 4) ignore static for the next X ms
-    // 5) repeat starting from 2
+    // 5) repeat starting from 1
 
     // Get the current time in milliseconds
     unsigned long ms_current_time = millis();
