@@ -20,8 +20,8 @@
 //#define PIN_BUTTON_DOWN_OUT GND
 #define NUM_BUTTONS 3
 
-// Initialize the GPIO button press queue and enable per-pin interrupts
-void init_gpio();
+// Initialize GPIO buttons and their interrupts
+void init_buttons();
 
 class Button
 {

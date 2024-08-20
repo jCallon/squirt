@@ -11,40 +11,12 @@
 // 3. ESP32-WROOM-32 data sheet, pins, etc.
 //     https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf
 
-// ========================== //
-// Include external libraries //
-// ========================== //
-
 // Include Arduino APIs
 #include <Arduino.h>
-// Include Arduino-dependant I2C LED API
-#include <LiquidCrystal_I2C.h>
-// Include FreeRTOS OS API
-#include "freertos/FreeRTOS.h"
 // Include custom button class implementation
 #include "button.h"
-
-// ===================== //
-// Declare useful macros //
-// ===================== //
-
-// Define what pins are mapped to what peripherals
-// See button.h for more
-//#define PIN_I2C_DISPLAY_GND GND
-//#define PIN_I2C_DISPLAY_VCC VIN
-#define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_27)
-#define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_26)
-
-// ================================= //
-// Initialize useful data structures //
-// ================================= //
-
-// Initialize peripherals
-LiquidCrystal_I2C display(
-    /* uint8_t lcd_Addr = */ 0x27, // << This depends on your display, see your manufaturer notes!
-    /* uint8_t lcd_cols = */ 20,
-    /* uint8_t lcd_rows = */ 4
-);
+// Include custom menu class implementation
+#include "menu.h"
 
 // =========================== //
 // Initialize and start device //
@@ -58,24 +30,10 @@ void setup()
     // Wait for serial port to connect
     while(!Serial);
 
-    // Initialize LCD display, clear anything on it, turn on the backlight, and print "Hello world!"
-    // https://lastminuteengineers.com/esp32-i2c-lcd-tutorial/
-    // https://forum.arduino.cc/t/liquidcrystal_i2c-how-to-change-pins/572686/7
-    Wire.begin(
-        /* int sda = */ PIN_I2C_DISPLAY_SDA,
-        /* int sdl = */ PIN_I2C_DISPLAY_SCL
-    );
-    display.init();
-    display.clear();
-    display.backlight();
-    display.setCursor(
-        /* uint8_t col = */ 0,
-        /* uint8_t row = */ 0
-    );
-    display.print(/* const char *c = */ "Hello world!");
-
-    // Initialize the GPIO button press queue and enable per-pin interrupts
-    init_gpio();
+    // Initialze menu and its input queue/task
+    init_menu();
+    // Initialize GPIO buttons and their interrupts
+    init_buttons();
 }
 
 // Don't have any need for a loop that runs forever, because we're using FreeRTOS tasks,

@@ -12,6 +12,12 @@
 #include <Arduino.h>
 // Include custom button class implementation
 #include "button.h"
+// Include custom menu class implementation
+#include "menu.h"
+
+// ======================= //
+// Instantiate useful data //
+// ======================= //
 
 // Instantiate instance of buttons
 Button buttons[NUM_BUTTONS] = {
@@ -32,21 +38,12 @@ Button buttons[NUM_BUTTONS] = {
     }
 };
 
-// Declare static functions
-static void task_read_button_press();
-static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin);
+// =================================== //
+// Functions for configuring button IO //
+// =================================== //
 
-// TODO: In the future, 'button' events may not be from buttons, but also from WiFi and Bluetooth.
-//       This is a poor way to handle the button queue, but it works for now.
-static QueueHandle_t gpio_event_queue = NULL;
-void init_gpio()
+void init_buttons()
 {
-    // Create 10 element long queue for GPIO-pin interrupts that simply stores the pin that causes the interrupt
-    // TODO: this would probably be ok to make as a static queue (no dynamic memory needed)
-    gpio_event_queue = xQueueCreate(
-        /* uxQueueLength = */ 10,
-        /* uxItemSize = */ sizeof(gpio_num_t));
-
     // Allow per-GPIO-pin interrupts
     // TODO: Should I remove the interrupt config between device reprogramming?
     //       What are GPIO pads?
@@ -73,65 +70,6 @@ void init_gpio()
         /* FILE *out_stream = */ stdout,
         /* uint64_t io_bit_mask = */ (1UL << button_in_pins[i])));
 #endif
-
-    // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
-    //       Check return value (TaskFunction_t)
-    xTaskCreate(
-        // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
-        /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_button_press,
-        // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
-        /* const char *const pcName = */ "read_gpio_queue",
-        // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
-        // Pointer that will be used as the parameter for the task being created.
-        /* void *const pvParameters = */ NULL,
-        // The priority at which the task should run.
-        // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
-        // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
-        /* UBaseType_t uxPriority = */ 10,
-        // Used to pass back a handle by which the created task can be referenced.
-        /* TaskHandle_t *const pxCreatedTask = */ NULL);
-}
-
-// TODO: Check stack/heap size.
-static void task_read_button_press()
-{
-    // Get GPIO pin number from queue holding all button presses
-    gpio_num_t gpio_pin = GPIO_NUM_0;
-
-    // Tasks must be implemented to never return (i.e. continuous loop)
-    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
-    while (1)
-    {
-        // Wait for an item to enter the button press queue
-        if(xQueueReceive(
-            // The handle to the queue from which the item is to be received.
-            /* QueueHandle_t xQueue = */ gpio_event_queue,
-            // Pointer to the buffer into which the received item will be copied.
-            /* void *pvBuffer = */ &gpio_pin,
-            // The maximum amount of time the task should block waiting for an item to receive should the queue be empty at the time of the call.
-            // xQueueReceive() will return immediately if xTicksToWait is zero and the queue is empty.
-            // The time is defined in tick periods so the constant portTICK_PERIOD_MS should be used to convert to real time if this is required.
-            /* TickType_t xTicksToWait */ portMAX_DELAY))
-        {
-            // Depending on the button in the queue, print a different message
-            switch(gpio_pin)
-            {
-                case PIN_BUTTON_UP_IN:
-                    Serial.println("Button UP pressed");
-                    break;
-                case PIN_BUTTON_CONFIRM_IN: 
-                    Serial.println("Button CONFIRM pressed");
-                    break;
-                case PIN_BUTTON_DOWN_IN:
-                    Serial.println("Button DOWN pressed");
-                    break;
-                default:
-                    Serial.println("Button from unrecognized GPIO pin triggered intr_button_press");
-                    break;
-            }
-        }
-    }
 }
 
 // Define event (interrupt) for a GPIO button press
@@ -145,41 +83,37 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
 {
     // TODO: This code is gross and error prone
     Button *button = NULL;
+    MENU_INPUT_t menu_input = MENU_INPUT_NONE;
     switch(gpio_pin)
     {
         case PIN_BUTTON_UP_IN:
             button = &buttons[0];
+            menu_input = MENU_INPUT_UP;
             break;
         case PIN_BUTTON_CONFIRM_IN:
             button = &buttons[1];
+            menu_input = MENU_INPUT_CONFIRM;
             break;
         case PIN_BUTTON_DOWN_IN:
             button = &buttons[2];
+            menu_input = MENU_INPUT_DOWN;
             break;
         default:
             return;
     }
-    // Do not add this button press to the queue if it was jsut static noise
+    // Do not add this button press to the queue if it was just static noise
     if(false == button->is_button_press())
     {
         return;
     }
 
-    // Write GPIO pin number to queue holding all button presses
-    // Remember, non-ISR queue access is not safe from within interrupts!
-    xQueueSendFromISR(
-        // The handle to the queue on which the item is to be posted.
-        /* QueueHandle_t xQueue = */ gpio_event_queue,
-        // A pointer to the item that is to be placed on the queue.
-        // The size of the items the queue will hold was defined when the queue was created,
-        // so this many bytes will be copied from pvItemToQueue into the queue storage area.
-        /* const void *const pvItemToQueue = */ &gpio_pin,
-        // xQueueGenericSendFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE if sending to the queue caused a task to unblock,
-        // and the unblocked task has a priority higher than the currently running task.
-        // If xQueueGenericSendFromISR() sets this value to pdTRUE then a context switch should be requested before the interrupt is exited.
-        /* BaseType_t *const pxHigherPriorityTaskWoken = */ NULL
-    );
+    // Write button input as menu input in menu input queue
+    from_isr_add_to_menu_input_queue(menu_input);
 }
+
+// ======================= //
+// Button member functions //
+// ======================= //
 
 Button::Button(
     bool arg_is_pull_up,
