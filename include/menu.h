@@ -4,6 +4,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// Include Arduino APIs
+#include <Arduino.h>
+// Include FreeRTOS task handling API
+#include "freeRTOS/semphr.h"
+
 // Define what pins are mapped to what peripherals
 // See button.h for more
 //#define PIN_I2C_DISPLAY_GND GND
@@ -25,13 +30,14 @@ void init_menu();
 // From an interrupt-service-routine, add a new menu_input to the back of the menu input queue
 void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input);
 
+// A line within a menu
 class MenuLine
 {
     public:
         // Constructor
         MenuLine(
-            char *arg_str_display,
-            //void (*arg_to_str)(),
+            String arg_str_display,
+            String (*arg_func_to_str)(),
             bool (*arg_func_on_up)(),
             bool (*arg_func_on_confirm)(),
             bool (*arg_func_on_down)());
@@ -41,15 +47,15 @@ class MenuLine
         // Get the string this menu line should currently be displaying as
         // If the function returns true, that means the string has changed since it was last requested,
         // and the display should be updated, if this line is on the screen
-        bool get_str(char **arg_str);
+        bool get_str(String **arg_str);
 
     private:
-        // Whether str_display changes as a result of reacting to a button press, and menu should update
-        bool str_display_has_changed;
-        // The string this line is currently displayed as
-        char *str_display;
+        // Whether str_display string has been updaed since its underlying data has changed.
+        bool is_str_and_data_desynced;
+        // The string this line is currently displayed as.
+        String str_display;
         // The function that should be used to used to convert this menu line to a string.
-        //void (*func_to_str)();
+        String (*func_to_str)();
         // When a user clicks confirm on this menu line while modifying it, the function it will call.
         // It should return true if, after this press, it is giving control back to the menu.
         bool (*func_on_confirm)();
@@ -64,6 +70,7 @@ class MenuLine
         //bool num_confirm;
 };
 
+// A menu meant to display on a screen
 class Menu
 {
     public:
@@ -85,6 +92,41 @@ class Menu
         size_t index_menu_item_hover;
         // Whether a menu item is currently selected, so menu inputs should be forwarded to the MenuLine's handlers instead of navigating Menu
         bool is_menu_item_selected;
+};
+
+// The overall state the menu display and the sensors operate on
+class Context
+{
+    public:
+        // Constructor
+        Context(StaticSemaphore_t *mutex_buffer);
+        // TODO: comment
+        bool check_humidity();
+        // TODO: comment
+        bool spray();
+        // Menu functions
+        // TODO: Is there a better way to do this? Arguments? Lambdas?
+        bool add_percent_desired_humidity();
+        bool add_minute_humidity_check_freq();
+        bool subtract_percent_desired_humidity();
+        bool subtract_minute_humidity_check_freq();
+        String str_percent_desired_humidity();
+        String str_minute_humidity_check_freq();
+        String str_time_last_humidity_check();
+        String str_time_next_humidity_check();
+    private:
+        // A mutex to keep updating all members of this class thread-safe.
+        SemaphoreHandle_t mutex_handle;
+        // When the humidity sensor was last checked, what its reaing was.
+        uint8_t percent_current_humidity;
+        // When the humidity sensor is next checked, what to make the humidty at or above.
+        uint8_t percent_desired_humidity;
+        // How often to check the current humidity, in minutes.
+        uint32_t minute_humidity_check_freq;
+        // The time when the humidity was last checked.
+        time_t time_last_humidity_check;
+        // The time when the humidity should next be checked.
+        time_t time_next_humidity_check;
 };
 
 #endif // __MENU_H__

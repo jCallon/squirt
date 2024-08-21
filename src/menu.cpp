@@ -1,7 +1,5 @@
 // Include Arduino-dependant I2C LED API
 #include <LiquidCrystal_I2C.h>
-// Include Arduino APIs
-#include <Arduino.h>
 // Include FreeRTOS queue API
 #include "freertos/queue.h"
 // Include custom menu class implementation
@@ -11,16 +9,95 @@
 // Instantiate useful data //
 // ======================= //
 
-// Define a thread and interrupt safe queue to hold menu inputs
+// Define a thread/interrupt safe queue to hold menu inputs
 QueueHandle_t menu_input_queue_handle;
 
-// Initialize peripheral
+// Define statically allocated buffer for context mutex
+StaticSemaphore_t context_mutex_buffer;
+
+// Initialize display peripheral
 LiquidCrystal_I2C display(
     /* uint8_t lcd_Addr = */ 0x27, // << This depends on your display, see your manufaturer notes!
     /* uint8_t lcd_cols = */ 20,
     /* uint8_t lcd_rows = */ 4
 );
 
+// Create an instance of a context
+static Context context = { /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer };
+
+// Work-around: a pointer to a bound function may only be used to call the function C/C++(300)
+// TODO: Do something better, use an argument at least? Lambdas? Un-class the context?
+bool context_check_humidity() { return context.check_humidity(); }
+bool context_spray() { return context.spray(); }
+bool context_add_percent_desired_humidity() { return context.add_percent_desired_humidity(); }
+bool context_add_minute_humidity_check_freq() { return context.add_minute_humidity_check_freq(); }
+bool context_subtract_percent_desired_humidity() { return context.subtract_percent_desired_humidity(); }
+bool context_subtract_minute_humidity_check_freq() { return context.subtract_minute_humidity_check_freq(); }
+String context_str_percent_desired_humidity() { return context.str_percent_desired_humidity(); }
+String context_str_minute_humidity_check_freq() { return context.str_minute_humidity_check_freq(); }
+String context_str_time_last_humidity_check() { return context.str_time_last_humidity_check(); }
+String context_str_time_next_humidity_check() { return context.str_time_next_humidity_check(); }
+
+// Define the lines within the menu
+// TODO: properly define functions and such for all of these
+static MenuLine menu_lines[] = 
+{
+    {
+        /* String str_display = */ String("Goal X: 50%"),
+        /* String (*arg_func_to_str)() = */ context_str_percent_desired_humidity,
+        /* bool (*arg_func_on_up)() = */ context_add_percent_desired_humidity,
+        /* bool (*arg_func_on_confirm)() = */ nullptr,
+        /* bool (*arg_func_on_down)() = */ context_subtract_percent_desired_humidity
+    },
+    {
+        /* String str_display = */ String("X freq: 1000 min"),
+        /* String (*arg_func_to_str)() = */ context_str_minute_humidity_check_freq,
+        /* bool (*arg_func_on_up)() = */ context_add_minute_humidity_check_freq,
+        /* bool (*arg_func_on_confirm)() = */ nullptr,
+        /* bool (*arg_func_on_down)() = */ context_subtract_minute_humidity_check_freq
+    },
+    {
+        /* String str_display = */ String("Last X: 08:00 AM"),
+        /* String (*arg_func_to_str)() = */ context_str_time_last_humidity_check,
+        /* bool (*arg_func_on_up)() = */ nullptr,
+        /* bool (*arg_func_on_confirm)() = */ nullptr,
+        /* bool (*arg_func_on_down)() = */ nullptr
+    },
+    {
+        /* String str_display = */ String("Next X: 12:00 PM"),
+        /* String (*arg_func_to_str)() = */ context_str_time_next_humidity_check,
+        /* bool (*arg_func_on_up)() = */ nullptr,
+        /* bool (*arg_func_on_confirm)() = */ nullptr,
+        /* bool (*arg_func_on_down)() = */ nullptr
+    },
+    {
+        /* String str_display = */ String("Check X"),
+        /* String (*arg_func_to_str)() = */ nullptr,
+        /* bool (*arg_func_on_up)() = */ nullptr,
+        /* bool (*arg_func_on_confirm)() = */ context_check_humidity,
+        /* bool (*arg_func_on_down)() = */ nullptr
+    },
+    {
+        /* String str_display = */ String("Trigger spray"),
+        /* String (*arg_func_to_str)() = */ nullptr,
+        /* bool (*arg_func_on_up)() = */ nullptr,
+        /* bool (*arg_func_on_confirm)() = */ context_spray,
+        /* bool (*arg_func_on_down)() = */ nullptr
+    }
+};
+
+// Create an instance of a menu
+// TODO: use a #define or someting better than hard-coding this value
+static Menu menu = {
+    /* MenuLine *arg_menu_lines = */ menu_lines,
+    /* size_t arg_num_menu_lines = */ 6
+};
+
+// ======================== //
+// Define custom characters //
+// ======================== //
+
+// Define an enum to keep track of custom characer mapping
 // See here for defining custom characters:
 // https://lastminuteengineers.com/esp32-i2c-lcd-tutorial/
 enum CUSTOM_CHAR_t : uint8_t
@@ -57,60 +134,13 @@ byte custom_char_filled_right_arrow[] = {
     0b00000,
 };
 
-// TODO: properly define functions and such for all of these
-static MenuLine menu_lines[] = 
-{
-    {
-        /* char *str_display = */ "Goal X: 50%",
-        /* void (*arg_func_on_up)() = */ nullptr,
-        /* void (*arg_func_on_confirm)() = */ nullptr,
-        /* void (*arg_func_on_down)() = */ nullptr
-    },
-    {
-        /* char *str_display = */ "X freq: 1000 min",
-        /* void (*arg_func_on_up)() = */ nullptr,
-        /* void (*arg_func_on_confirm)() = */ nullptr,
-        /* void (*arg_func_on_down)() = */ nullptr
-    },
-    {
-        /* char *str_display = */ "Last X: 08:00 AM",
-        /* void (*arg_func_on_up)() = */ nullptr,
-        /* void (*arg_func_on_confirm)() = */ nullptr,
-        /* void (*arg_func_on_down)() = */ nullptr
-    },
-    {
-        /* char *str_display = */ "Next X: 12:00 PM",
-        /* void (*arg_func_on_up)() = */ nullptr,
-        /* void (*arg_func_on_confirm)() = */ nullptr,
-        /* void (*arg_func_on_down)() = */ nullptr
-    },
-    {
-        /* char *str_display = */ "Check X",
-        /* void (*arg_func_on_up)() = */ nullptr,
-        /* void (*arg_func_on_confirm)() = */ nullptr,
-        /* void (*arg_func_on_down)() = */ nullptr
-    },
-    {
-        /* char *str_display = */ "Trigger spray",
-        /* void (*arg_func_on_up)() = */ nullptr,
-        /* void (*arg_func_on_confirm)() = */ nullptr,
-        /* void (*arg_func_on_down)() = */ nullptr
-    }
-};
-
-// Create an instance of a menu
-// TODO: use a #define or someting better than hard-coding this value
-static Menu menu = {
-    /* MenuLine *arg_menu_lines = */ menu_lines,
-    /* size_t arg_num_menu_lines = */ 6
-};
-
 // =================================================== //
 // Functions for interacting with the menu input queue //
 // =================================================== //
 
 static void task_read_menu_input_queue();
 
+// TODO: Move to menu member function?
 void init_menu()
 {
     // Initialize LCD display, clear anything on it, turn on the backlight, and print "Hello world!"
@@ -191,7 +221,7 @@ static void task_read_menu_input_queue()
 
     // Tasks must be implemented to never return (i.e. continuous loop)
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
-    while (1)
+    while(1)
     {
         // Wait for an input to enter the menu input queue
         if(xQueueReceive(
@@ -215,14 +245,15 @@ static void task_read_menu_input_queue()
 // ========================= //
 
 MenuLine::MenuLine(
-    char *arg_str_display,
-    //void (*arg_to_str)(),
+    String arg_str_display,
+    String (*arg_func_to_str)(),
     bool (*arg_func_on_up)(),
     bool (*arg_func_on_confirm)(),
     bool (*arg_func_on_down)())
 {
-    str_display_has_changed = true;
+    is_str_and_data_desynced = false;
     str_display = arg_str_display;
+    func_to_str = arg_func_to_str;
     func_on_up = arg_func_on_up;
     func_on_confirm = arg_func_on_confirm;
     func_on_down = arg_func_on_down;
@@ -254,14 +285,30 @@ bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
     }
 
     // Call the function
-    return (*func_to_call)();
+    bool status = (*func_to_call)();
+
+    // Record whether the display is not showing the current updates
+    // TODO: pass str_display_has_changed as argument instead so functions can set this?
+    if ((MENU_INPUT_UP == input) ||
+        (MENU_INPUT_DOWN == input))
+    {
+        is_str_and_data_desynced = true;
+    }
+
+    return status;
 }
 
-bool MenuLine::get_str(char **arg_str)
+bool MenuLine::get_str(String **arg_str)
 {
-    *arg_str = str_display;
-    bool status = str_display_has_changed;
-    str_display_has_changed = false;
+    // Only generate a new string if there's a function to do it and a change has happened to the underlying data
+    if ((nullptr != func_to_str) &&
+        (true == is_str_and_data_desynced))
+    {
+        str_display = (*func_to_str)();
+    }
+    *arg_str = &str_display;
+    bool status = is_str_and_data_desynced;
+    is_str_and_data_desynced = false;
     return status;
 }
 
@@ -293,19 +340,15 @@ void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
         switch(menu_input)
         {
             case MENU_INPUT_UP:
-                Serial.println("Read menu UP input");
                 index_menu_item_hover = (index_menu_item_hover == 0) ? (num_menu_lines - 1) : (index_menu_item_hover - 1);
                 break;
             case MENU_INPUT_CONFIRM:
-                Serial.println("Read menu CONFIRM input");
                 is_menu_item_selected = true;
                 break;
             case MENU_INPUT_DOWN:
-                Serial.println("Read menu DOWN input");
                 index_menu_item_hover = (index_menu_item_hover == (num_menu_lines - 1)) ? (0) : (index_menu_item_hover + 1);
                 break;
             default:
-                Serial.println("Read unrecognized menu input, will do nothing with it");
                 break;
         }
     }
@@ -354,7 +397,7 @@ void Menu::update_display()
     {
         return;
     }
-    char *menu_line_str = nullptr;
+    String *menu_line_str = nullptr;
     for(size_t line_num = 0; line_num < 4; ++line_num)
     {
         // Set the cursor
@@ -367,7 +410,166 @@ void Menu::update_display()
         (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
         if(nullptr != menu_line_str)
         {
-            display.print(/* const char *c = */ menu_line_str);
+            display.print(/* const char *c = */ menu_line_str->c_str());
         }
     }
+}
+
+// ======================== //
+// Context member functions //
+// ======================== //
+
+Context::Context(StaticSemaphore_t *mutex_buffer)
+{
+    // Create mutex, open it for grabbing
+    mutex_handle = xSemaphoreCreateMutexStatic(/* pxMutexBuffer = */ mutex_buffer);
+    assert(nullptr != mutex_handle);
+    xSemaphoreGive(/* xSempahore = */ mutex_handle);
+
+    // TODO: read setting from previous run
+    percent_desired_humidity = 25;
+    // TODO: read setting from previous run
+    minute_humidity_check_freq = 100;
+
+    check_humidity();
+}
+
+bool Context::check_humidity()
+{
+    // Wait until the mutex is free, or 1000 milliseconds
+    // If the mutex could not be taken within 1000 milliseconds, don't do anything
+    if(pdFALSE == xSemaphoreTake(
+        /* xSemaphore = */ mutex_handle,
+        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
+    {
+        return true;
+    }
+
+    // TODO: read the actual humidity
+    percent_current_humidity = 25;
+    time_last_humidity_check = time(/* time_t *arg = */ nullptr);
+    time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+
+    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    return true;
+}
+
+bool Context::spray()
+{
+    // TODO: make this code move the servo
+    return true;
+}
+
+bool Context::add_percent_desired_humidity()
+{
+    // Wait until the mutex is free, or 1000 milliseconds
+    // If the mutex could not be taken within 1000 milliseconds, don't do anything
+    if(pdFALSE == xSemaphoreTake(
+        /* xSemaphore = */ mutex_handle,
+        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
+    {
+        return false;
+    }
+
+    percent_desired_humidity = (percent_desired_humidity >= 100) ? 0 : (percent_desired_humidity + 1);
+
+    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    return false;
+}
+
+bool Context::add_minute_humidity_check_freq()
+{
+    // Wait until the mutex is free, or 1000 milliseconds
+    // If the mutex could not be taken within 1000 milliseconds, don't do anything
+    if(pdFALSE == xSemaphoreTake(
+        /* xSemaphore = */ mutex_handle,
+        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
+    {
+        return false;
+    }
+
+    ++minute_humidity_check_freq;
+    time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+
+    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    return false;
+}
+
+bool Context::subtract_percent_desired_humidity()
+{
+    // Wait until the mutex is free, or 1000 milliseconds
+    // If the mutex could not be taken within 1000 milliseconds, don't do anything
+    if(pdFALSE == xSemaphoreTake(
+        /* xSemaphore = */ mutex_handle,
+        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
+    {
+        return false;
+    }
+
+    percent_desired_humidity = (percent_desired_humidity <= 0) ? 100 : (percent_desired_humidity - 1);
+
+    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    return false;
+}
+
+bool Context::subtract_minute_humidity_check_freq()
+{
+    // Wait until the mutex is free, or 1000 milliseconds
+    // If the mutex could not be taken within 1000 milliseconds, don't do anything
+    if(pdFALSE == xSemaphoreTake(
+        /* xSemaphore = */ mutex_handle,
+        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
+    {
+        return false;
+    }
+
+    --minute_humidity_check_freq;
+    time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+
+    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    return false;
+}
+
+String Context::str_percent_desired_humidity()
+{
+    return String("Goal X: " + String(percent_desired_humidity, DEC) + "%");
+}
+
+String Context::str_minute_humidity_check_freq()
+{
+    return String("X freq: " + String(minute_humidity_check_freq, DEC) + " min");
+}
+
+String Context::str_time_last_humidity_check()
+{
+    // -------------------- //
+    //   Last X: Fri 08:00  //
+    // -------------------- //
+    // https://en.cppreference.com/w/cpp/chrono/c/strftime
+    // TODO: Don't hard-code this length, use a #define or member instead
+    char line[20 - 2 + 1] = { 0 };
+    strftime(
+        /* char* str = */ line,
+        /* std::size_t count = */ sizeof(line),
+        /* const char* format = */ "%a %H:%M",
+        // TODO: Comment args
+        /* const std::tm* tp = */ localtime(&time_last_humidity_check));
+    return String("Last X: " + String(line));
+}
+
+String Context::str_time_next_humidity_check()
+{
+    // -------------------- //
+    //   Next X: Fri 08:00  //
+    // -------------------- //
+    // https://en.cppreference.com/w/cpp/chrono/c/strftime
+    // TODO: Don't hard-code this length, use a #define or member instead
+    char line[20 - 2 + 1] = { 0 };
+    strftime(
+        /* char* str = */ line,
+        /* std::size_t count = */ sizeof(line),
+        /* const char* format = */ "%a %H:%M",
+        // TODO: Comment args
+        /* const std::tm* tp = */ localtime(&time_next_humidity_check));
+    return String("Last X: " + String(line));
 }
