@@ -8,8 +8,6 @@
 // 4. A tutorial on how to debounce your buttons.
 //    https://esp32io.com/tutorials/esp32-button-debounce
 
-// Include Arduino APIs
-#include <Arduino.h>
 // Include custom button class implementation
 #include "button.h"
 // Include custom menu class implementation
@@ -76,9 +74,9 @@ void init_buttons()
 // This ISR handler will be called from an ISR.
 // So there is a stack size limit (configurable as "ISR stack size" in menuconfig).
 // This limit is smaller compared to a global GPIO interrupt handler due to the additional level of indirection.
-// TODO: What does IRAM_ATTR do?
-//       Check stack/heap size.
+// TODO: Check stack/heap size.
 // https://github.com/espressif/esp-idf/blob/v5.3/examples/peripherals/gpio/generic_gpio/main/gpio_example_main.c
+// IRAM_ATTR puts this function in internal RAM instead of flash memory to run faster
 static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
 {
     // TODO: This code is gross and error prone
@@ -125,7 +123,7 @@ Button::Button(
     ms_debounce = arg_ms_debounce;
     pin_in = arg_pin_in;
     ms_next_valid_edge = 0;
-    // Mutex type semaphores cannot be used from within intrrupt service routines.
+    // Mutex type semaphores cannot be used from within interrupt service routines.
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/system/freertos_idf.html
     // TODO: Look into 'direct to task notification'
     //       See if a mtuex actually helps the reliability of the debounce code
@@ -151,12 +149,16 @@ void Button::register_pin()
 
 void Button::register_intr()
 {
-    // Set GPIO interrupt trigger type to the correct edge for whether this is a pull-up or pull-down resistor button
+    // Set GPIO interrupt trigger type to an edge,
+    // which edge depends on whether this is a pull-up or pull-down resistor button
     ESP_ERROR_CHECK(gpio_set_intr_type(
         /* gpio_num_t gpio_num = */ pin_in,
         /* gpio_int_type_t intr_type = */ is_pull_up ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE));
 
-    // Register interrupt handler for this GPIO pin specifically, it will call intr_write_button_press on falling/rising edge
+    // Register interrupt handler for this GPIO pin specifically,
+    // it will call intr_write_button_press on falling/rising edge
+    // It's possible to use one ISR for all GPIO pins,
+    // but they don't support interrputs on edge changes
     ESP_ERROR_CHECK(gpio_isr_handler_add(
         /* gpio_num_t gpio_num = */ pin_in,
         /* gpio_isr_t isr_handler = */ (gpio_isr_t) intr_write_button_press,
@@ -170,18 +172,21 @@ bool Button::is_button_press()
 {
     // This button press logic is flawed, but good enough for now.
     // User IO is not the main concern of this system, or FreeRTOS generally.
-    // Ex:
-    // HI _____                   _____
-    // LO      \/\/\/\_____/\/\/\/
+    // Ex: HI _____                   _____
+    //     LO      \/\/\/\_____/\/\/\/
     // 0) assume all buttons start unpressed and in HIGH
     // 1) set the button as pressed once the first static happens
     // 2) ignore static for next X ms
     // 3) set button as unpressed once the first static happens
     // 4) ignore static for the next X ms
     // 5) repeat starting from 1
+    // TODO: Would disabling the interrupt within the ISR,
+    //       then having a timer renable it in X ms be more or less efficient?
+    //       Look at source code.
 
-    // Get the current time in milliseconds
-    unsigned long ms_current_time = millis();
+    // Get current milliseconds
+    // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
+    int64_t ms_current_time = esp_timer_get_time();
 
     // Only allow one thread to read/modify this button's members at a time
     // If the semaphore is not available, wait 25 ticks to see if it becomes free

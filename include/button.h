@@ -12,11 +12,11 @@
 // - The button at pin 35 will be used by a user if they want to confirm an option in a menu
 // - The button at pin 32 will be used by a user if they want to go down in a menu
 // Maybe some renaming is warranted.
-#define PIN_BUTTON_UP_IN ((gpio_num_t) GPIO_NUM_25)
+#define PIN_BUTTON_UP_IN ((gpio_num_t) GPIO_NUM_21)
 //#define PIN_BUTTON_UP_OUT GND
-#define PIN_BUTTON_CONFIRM_IN ((gpio_num_t) GPIO_NUM_33)
+#define PIN_BUTTON_CONFIRM_IN ((gpio_num_t) GPIO_NUM_19)
 //#define PIN_BUTTON_CONFIRM_OUT GND
-#define PIN_BUTTON_DOWN_IN ((gpio_num_t) GPIO_NUM_32)
+#define PIN_BUTTON_DOWN_IN ((gpio_num_t) GPIO_NUM_18)
 //#define PIN_BUTTON_DOWN_OUT GND
 #define NUM_BUTTONS 3
 
@@ -56,7 +56,7 @@ class Button
         gpio_num_t pin_in;
         // At what time, in milliseconds since the processor started running,
         // an interrupt for this edge can be considered a valid button press again instead of just 'static noise'.
-        unsigned long ms_next_valid_edge;
+        int64_t ms_next_valid_edge;
         // A mutual exlusion to apply when only one thread should be able to access something at a time.
         //SemaphoreHandle_t mutex_handle;
         // A statically allocated buffer for the mutex to live in.

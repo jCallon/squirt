@@ -5,67 +5,62 @@
 // Include custom menu class implementation
 #include "menu.h"
 
+// Define the number of lines in menu_lines
+#define NUM_MENU_LINES 6
+
+// Define I2C address for display, see your manufacturer notes to figure out yours
+#define DISPLAY_I2C_ADDR 0x27
+// Define the number of rows in the LCD display (the number of lines of characters)
+#define NUM_DISPLAY_ROWS 4
+// Define the number of columns in the LCD display (the number of characters in each line)
+#define NUM_DISPLAY_COLUMNS 20
+
 // ======================= //
 // Instantiate useful data //
 // ======================= //
 
-// Define a thread/interrupt safe queue to hold menu inputs
+// TODO: Make these members of Menu, so you can have multiple menus?
 QueueHandle_t menu_input_queue_handle;
-
 // Define statically allocated buffer for context mutex
 StaticSemaphore_t context_mutex_buffer;
-
 // Initialize display peripheral
 LiquidCrystal_I2C display(
-    /* uint8_t lcd_Addr = */ 0x27, // << This depends on your display, see your manufaturer notes!
-    /* uint8_t lcd_cols = */ 20,
-    /* uint8_t lcd_rows = */ 4
+    /* uint8_t lcd_Addr = */ DISPLAY_I2C_ADDR,
+    /* uint8_t lcd_cols = */ NUM_DISPLAY_COLUMNS,
+    /* uint8_t lcd_rows = */ NUM_DISPLAY_ROWS
 );
-
 // Create an instance of a context
 static Context context = { /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer };
 
-// Work-around: a pointer to a bound function may only be used to call the function C/C++(300)
-// TODO: Do something better, use an argument at least? Lambdas? Un-class the context?
-bool context_check_humidity() { return context.check_humidity(); }
-bool context_spray() { return context.spray(); }
-bool context_add_percent_desired_humidity() { return context.add_percent_desired_humidity(); }
-bool context_add_minute_humidity_check_freq() { return context.add_minute_humidity_check_freq(); }
-bool context_subtract_percent_desired_humidity() { return context.subtract_percent_desired_humidity(); }
-bool context_subtract_minute_humidity_check_freq() { return context.subtract_minute_humidity_check_freq(); }
-String context_str_percent_desired_humidity() { return context.str_percent_desired_humidity(); }
-String context_str_minute_humidity_check_freq() { return context.str_minute_humidity_check_freq(); }
-String context_str_time_last_humidity_check() { return context.str_time_last_humidity_check(); }
-String context_str_time_next_humidity_check() { return context.str_time_next_humidity_check(); }
-
 // Define the lines within the menu
-// TODO: properly define functions and such for all of these
-static MenuLine menu_lines[] = 
+// Using C++ lambdas: https://en.cppreference.com/w/cpp/language/lambda
+// TODO: make context an argument so multiple contexts can be controled by this menu
+static MenuLine menu_lines[NUM_MENU_LINES] = 
 {
     {
         /* String str_display = */ String("Goal X: 50%"),
-        /* String (*arg_func_to_str)() = */ context_str_percent_desired_humidity,
-        /* bool (*arg_func_on_up)() = */ context_add_percent_desired_humidity,
+        /* String (*arg_func_to_str)() = */ []() { return context.str_percent_desired_humidity(); },
+        /* bool (*arg_func_on_up)() = */ []() { return context.add_percent_desired_humidity(); },
         /* bool (*arg_func_on_confirm)() = */ nullptr,
-        /* bool (*arg_func_on_down)() = */ context_subtract_percent_desired_humidity
+        /* bool (*arg_func_on_down)() = */ []() { return context.subtract_percent_desired_humidity(); }
     },
     {
         /* String str_display = */ String("X freq: 1000 min"),
-        /* String (*arg_func_to_str)() = */ context_str_minute_humidity_check_freq,
-        /* bool (*arg_func_on_up)() = */ context_add_minute_humidity_check_freq,
+        /* String (*arg_func_to_str)() = */ []() { return context.str_minute_humidity_check_freq(); },
+        /* bool (*arg_func_on_up)() = */ []() { return context.add_minute_humidity_check_freq(); },
         /* bool (*arg_func_on_confirm)() = */ nullptr,
-        /* bool (*arg_func_on_down)() = */ context_subtract_minute_humidity_check_freq
+        /* bool (*arg_func_on_down)() = */ []() { return context.subtract_minute_humidity_check_freq(); }
     },
     {
         /* String str_display = */ String("Last X: 08:00 AM"),
-        /* String (*arg_func_to_str)() = */ context_str_time_last_humidity_check,
+        /* String (*arg_func_to_str)() = */ []() { return context.str_time_last_humidity_check(); },
         /* bool (*arg_func_on_up)() = */ nullptr,
         /* bool (*arg_func_on_confirm)() = */ nullptr,
         /* bool (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String("Next X: 12:00 PM"),
-        /* String (*arg_func_to_str)() = */ context_str_time_next_humidity_check,
+        /* String (*arg_func_to_str)() = */ []() { return context.str_time_next_humidity_check(); },
         /* bool (*arg_func_on_up)() = */ nullptr,
         /* bool (*arg_func_on_confirm)() = */ nullptr,
         /* bool (*arg_func_on_down)() = */ nullptr
@@ -74,23 +69,22 @@ static MenuLine menu_lines[] =
         /* String str_display = */ String("Check X"),
         /* String (*arg_func_to_str)() = */ nullptr,
         /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ context_check_humidity,
+        /* bool (*arg_func_on_confirm)() = */ []() { return context.check_humidity(); },
         /* bool (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String("Trigger spray"),
         /* String (*arg_func_to_str)() = */ nullptr,
         /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ context_spray,
+        /* bool (*arg_func_on_confirm)() = */ []() { return context.spray(); },
         /* bool (*arg_func_on_down)() = */ nullptr
     }
 };
 
 // Create an instance of a menu
-// TODO: use a #define or someting better than hard-coding this value
 static Menu menu = {
     /* MenuLine *arg_menu_lines = */ menu_lines,
-    /* size_t arg_num_menu_lines = */ 6
+    /* size_t arg_num_menu_lines = */ NUM_MENU_LINES
 };
 
 // ======================== //
@@ -108,8 +102,7 @@ enum CUSTOM_CHAR_t : uint8_t
     CUSTOM_CHAR_MAX
 };
 
-// Define custom character for water emoji
-// represented in the display example below as X
+// Define custom character for water emoji, X in the display examples
 byte custom_char_water_drop[] = {
     0b00100,
     0b01110,
@@ -121,8 +114,7 @@ byte custom_char_water_drop[] = {
     0b00000,
 };
 
-// Define custom character for water emoji
-// represented in the display example below as X
+// Define custom character for filled right-arrow emoji, # in display examples
 byte custom_char_filled_right_arrow[] = {
     0b01000,
     0b01100,
@@ -140,7 +132,7 @@ byte custom_char_filled_right_arrow[] = {
 
 static void task_read_menu_input_queue();
 
-// TODO: Move to menu member function?
+// TODO: Move the next 3 functions to menu member functions so multiple menus can exist?
 void init_menu()
 {
     // Initialize LCD display, clear anything on it, turn on the backlight, and print "Hello world!"
@@ -178,7 +170,7 @@ void init_menu()
 
     // Start task to read inputs added to queue
     // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
-    //       Check return value (TaskFunction_t)
+    TaskHandle_t task_handle = nullptr;
     xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_menu_input_queue,
@@ -193,14 +185,16 @@ void init_menu()
         // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
         /* UBaseType_t uxPriority = */ 10,
         // Used to pass back a handle by which the created task can be referenced.
-        /* TaskHandle_t *const pxCreatedTask = */ NULL);
+        /* TaskHandle_t *const pxCreatedTask = */ &task_handle);
+    configASSERT(task_handle);
 }
 
 void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input)
 {
     // Write menu input GPIO pin number to queue holding all button presses
     // Remember, non-ISR queue access is not safe from within interrupts!
-    xQueueSendFromISR(
+    // Don't care about the return value, I am ok with losing some button inputs
+    (void) xQueueSendFromISR(
         // The handle to the queue on which the item is to be posted.
         /* QueueHandle_t xQueue = */ menu_input_queue_handle,
         // A pointer to the item that is to be placed on the queue.
@@ -224,7 +218,7 @@ static void task_read_menu_input_queue()
     while(1)
     {
         // Wait for an input to enter the menu input queue
-        if(xQueueReceive(
+        if(pdTRUE == xQueueReceive(
             // The handle to the queue from which the item is to be received.
             /* QueueHandle_t xQueue = */ menu_input_queue_handle,
             // Pointer to the buffer into which the received item will be copied.
@@ -234,7 +228,7 @@ static void task_read_menu_input_queue()
             // The time is defined in tick periods so the constant portTICK_PERIOD_MS should be used to convert to real time if this is required.
             /* TickType_t xTicksToWait */ portMAX_DELAY))
         {
-            // Depending on the button in the queue, print a different message
+            // Use the menu input to manipulated the menu
             menu.react_to_menu_input(/* MENU_INPUT_t menu_input = */ menu_input);
         }
     }
@@ -251,9 +245,9 @@ MenuLine::MenuLine(
     bool (*arg_func_on_confirm)(),
     bool (*arg_func_on_down)())
 {
-    is_str_and_data_desynced = false;
     str_display = arg_str_display;
     func_to_str = arg_func_to_str;
+    is_str_and_data_desynced = (arg_func_to_str != nullptr);
     func_on_up = arg_func_on_up;
     func_on_confirm = arg_func_on_confirm;
     func_on_down = arg_func_on_down;
@@ -262,6 +256,7 @@ MenuLine::MenuLine(
 bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
 {
     // Get the function to call based on the input received
+    // TODO: can use hashmap instead of switch statement, ex. func_to_call = funcs[MENU_INPUT_UP]
     bool (*func_to_call)() = nullptr;
     switch(input)
     {
@@ -288,7 +283,7 @@ bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
     bool status = (*func_to_call)();
 
     // Record whether the display is not showing the current updates
-    // TODO: pass str_display_has_changed as argument instead so functions can set this?
+    // TODO: Pass is_str_and_data_desynced as argument instead so functions can set this?
     if ((MENU_INPUT_UP == input) ||
         (MENU_INPUT_DOWN == input))
     {
@@ -392,13 +387,12 @@ void Menu::update_display()
     }
 
     // Display menu lines
-    // TODO: use #define or varaible to hold number of lines in the display
     if (0 == num_menu_lines)
     {
         return;
     }
     String *menu_line_str = nullptr;
-    for(size_t line_num = 0; line_num < 4; ++line_num)
+    for(size_t line_num = 0; line_num < NUM_DISPLAY_ROWS; ++line_num)
     {
         // Set the cursor
         display.setCursor(
@@ -546,8 +540,7 @@ String Context::str_time_last_humidity_check()
     //   Last X: Fri 08:00  //
     // -------------------- //
     // https://en.cppreference.com/w/cpp/chrono/c/strftime
-    // TODO: Don't hard-code this length, use a #define or member instead
-    char line[20 - 2 + 1] = { 0 };
+    char line[NUM_DISPLAY_COLUMNS - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
     strftime(
         /* char* str = */ line,
         /* std::size_t count = */ sizeof(line),
@@ -563,13 +556,12 @@ String Context::str_time_next_humidity_check()
     //   Next X: Fri 08:00  //
     // -------------------- //
     // https://en.cppreference.com/w/cpp/chrono/c/strftime
-    // TODO: Don't hard-code this length, use a #define or member instead
-    char line[20 - 2 + 1] = { 0 };
+    char line[NUM_DISPLAY_COLUMNS - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
     strftime(
         /* char* str = */ line,
         /* std::size_t count = */ sizeof(line),
         /* const char* format = */ "%a %H:%M",
         // TODO: Comment args
         /* const std::tm* tp = */ localtime(&time_next_humidity_check));
-    return String("Last X: " + String(line));
+    return String("Next X: " + String(line));
 }
