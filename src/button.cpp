@@ -42,6 +42,13 @@ Button buttons[NUM_BUTTONS] = {
     }
 };
 
+// Store handle for sleep task, so it can be resumed from interrupt
+TaskHandle_t toggle_sleep_mode_task_handle;
+
+// Declare static functions
+static void task_toggle_sleep_mode();
+static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin);
+
 // =================================== //
 // Functions for configuring button IO //
 // =================================== //
@@ -75,63 +82,80 @@ void init_buttons()
         /* FILE *out_stream = */ stdout,
         /* uint64_t io_bit_mask = */ (1UL << button_in_pins[i])));
 #endif
+
+    // Create task for sleep mode that can simply be resumed from an interrupt, reducing interrupt length
+    // TODO: Look into static allocation and reduced stack usage, this task isn't heavy
+    (void) xTaskCreate(
+        // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
+        /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_toggle_sleep_mode,
+        // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
+        /* const char *const pcName = */ "toggle_sleep",
+        // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        // Pointer that will be used as the parameter for the task being created.
+        /* void *const pvParameters = */ NULL,
+        // The priority at which the task should run.
+        // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
+        // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
+        /* UBaseType_t uxPriority = */ 10,
+        // Used to pass back a handle by which the created task can be referenced.
+        /* TaskHandle_t *const pxCreatedTask = */ &toggle_sleep_mode_task_handle);
+    configASSERT(toggle_sleep_mode_task_handle);
 }
 
 // Make it so the device is able to 'sleep', in other words,
 // save power by disabling all user IO (except the button to re-enable it) and running autonomously
-volatile bool is_asleep = false;
-static void IRAM_ATTR task_toggle_sleep_mode()
+// Altering the display and creating a task from within an interrupt causes memory to corrupt and the device to reset.
+static void task_toggle_sleep_mode()
 {
+    bool is_asleep = false;
     LiquidCrystal_I2C *display = get_display();
     TaskHandle_t read_menu_input_queue_task_handle = get_read_menu_input_queue_task_handle();
 
-    if(true == is_asleep)
+    do
     {
-        // Resume task to read menu inputs
-        vTaskResume(read_menu_input_queue_task_handle);
+        // Suspend this task until it is needed
+        vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ NULL);
 
-        // Turn on all button interrupts
-        for(size_t i = 0; i < NUM_BUTTONS - 1; ++i)
+        // If the device is currently asleep, unsleep it
+        if(true == is_asleep)
         {
-            buttons[i].enable_intr();
+            // Resume task to read menu inputs
+            vTaskResume(/* TaskHandle_t xTaskToResume = */ read_menu_input_queue_task_handle);
+
+            // Turn on all button interrupts
+            for(size_t i = 0; i < NUM_BUTTONS - 1; ++i)
+            {
+                buttons[i].enable_intr();
+            }
+
+            // Turn on screen
+            display->display();
+            display->backlight();
+
+            // NOTE: if I ever enable wireless protocols, re-enable them here
+        }
+        // Otherwise, sleep the device
+        else
+        {
+            // Turn off screen
+            display->noDisplay();
+            display->noBacklight();
+
+            // Turn off all button interrupts besides sleep button
+            for(size_t i = 0; i < NUM_BUTTONS - 1; ++i)
+            {
+                buttons[i].disable_intr();
+            }
+
+            // Pause task to read menu inputs
+            vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ read_menu_input_queue_task_handle);
+
+            // NOTE: if I ever enable wireless protocols, disable them here
         }
 
-#if 0
-        // TODO: Using these causes memory to become corrupt and reset the device, use task?
-        // Turn on screen
-        //display->display();
-        display->backlight();
-
-        // NOTE: if I ever enable wireless protocols, re-enable them here
-#endif
-    }
-    else
-    {
-#if 0
-        // TODO: Using these causes memory to become corrupt and reset the device, use task?
-        // Turn off screen
-        //display->noDisplay();
-        display->noBacklight();
-#endif
-
-        // Turn off all button interrupts besides sleep button
-        for(size_t i = 0; i < NUM_BUTTONS - 1; ++i)
-        {
-            // NOTE: This function is allowed to be executed when Cache is disabled within ISR context,
-            // by enabling CONFIG_GPIO_CTRL_FUNC_IN_IRAM
-            buttons[i].disable_intr();
-        }
-
-        // Pause task to read menu inputs
-        vTaskSuspend(read_menu_input_queue_task_handle);
-
-        // NOTE: if I ever enable wireless protocols, disable them here
-    }
-
-    is_asleep = !is_asleep;
-
-    // Suspend this task until it is needed again
-    //vTaskSuspend(NULL);
+        is_asleep = !is_asleep;
+    } while (1);
 }
 
 // Define event (interrupt) for a GPIO button press
@@ -162,7 +186,6 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
             break;
         case PIN_BUTTON_SLEEP_IN:
             button = &buttons[3];
-            menu_input = MENU_INPUT_NONE;
             break;
         default:
             return;
@@ -177,26 +200,7 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
     // Write button input as menu input in menu input queue
     if (PIN_BUTTON_SLEEP_IN == gpio_pin)
     {
-        task_toggle_sleep_mode();
-
-#if 0
-        (void) xTaskCreate(
-            // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
-            /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_toggle_sleep_mode,
-            // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
-            /* const char *const pcName = */ "toggle_sleep_mode",
-            // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-            /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
-            // Pointer that will be used as the parameter for the task being created.
-            /* void *const pvParameters = */ NULL,
-            // The priority at which the task should run.
-            // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
-            // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
-            /* UBaseType_t uxPriority = */ 10,
-            // Used to pass back a handle by which the created task can be referenced.
-            /* TaskHandle_t *const pxCreatedTask = */ NULL);
-#endif
-
+        vTaskResume(/* TaskHandle_t xTaskToResume = */ toggle_sleep_mode_task_handle);
         return;
     }
     from_isr_add_to_menu_input_queue(menu_input);
@@ -267,6 +271,8 @@ void Button::enable_intr()
 void Button::disable_intr()
 {
     // Disable GPIO module interrupt for this GPIO pin
+    // NOTE: This function is allowed to be executed when Cache is disabled within ISR context,
+    // by enabling CONFIG_GPIO_CTRL_FUNC_IN_IRAM
     ESP_ERROR_CHECK(gpio_intr_disable(/* gpio_num_t gpio_num = */ pin_in));
 }
 
