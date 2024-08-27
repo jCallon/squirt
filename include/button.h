@@ -8,17 +8,19 @@
 
 // Each button is connected to GND, in a pull-up resistor fashion (LOW = 0 = pressed, HIGH = 1 = not pressed)
 // These defines aren't the state of a button, simply:
-// - The button at pin 34 will be used by a user if they want to go up in a menu
-// - The button at pin 35 will be used by a user if they want to confirm an option in a menu
-// - The button at pin 32 will be used by a user if they want to go down in a menu
-// Maybe some renaming is warranted.
+// - The button at pin PIN_BUTTON_UP_IN will be used by a user if they want to go up in a menu
+// - The button at pin PIN_BUTTON_CONFIRM_IN will be used by a user if they want to confirm an option in a menu
+// - The button at pin PIN_BUTTON_DOWN_IN will be used by a user if they want to go down in a menu
+// - The button at pin PIN_BUTTON_SLEEP_IN will be used by a user to go into low-power mode, diabling user IO
 #define PIN_BUTTON_UP_IN ((gpio_num_t) GPIO_NUM_21)
 //#define PIN_BUTTON_UP_OUT GND
 #define PIN_BUTTON_CONFIRM_IN ((gpio_num_t) GPIO_NUM_19)
 //#define PIN_BUTTON_CONFIRM_OUT GND
 #define PIN_BUTTON_DOWN_IN ((gpio_num_t) GPIO_NUM_18)
+//#define PIN_BUTTON_SLEEP_OUT GND
+#define PIN_BUTTON_SLEEP_IN ((gpio_num_t) GPIO_NUM_23)
 //#define PIN_BUTTON_DOWN_OUT GND
-#define NUM_BUTTONS 3
+#define NUM_BUTTONS 4
 
 // Initialize GPIO buttons and their interrupts
 void init_buttons();
@@ -36,6 +38,10 @@ class Button
         // This function will register intr_write_button_press, defined in button.cpp,
         // its interrupt routine (the function called when an interrupt is received), with pin_in as the argument.
         void register_intr();
+        // Start listening for this interrupt
+        void enable_intr();
+        // Stop listening for this interrupt
+        void disable_intr();
         // Determine whether this interrupt is too close to the previous, and is 'static noise', or is not, and is a valid button press.
         bool is_button_press();
 

@@ -6,6 +6,12 @@
 
 // Include Arduino APIs
 #include <Arduino.h>
+// Include Arduino-dependant I2C LED API
+#include <LiquidCrystal_I2C.h>
+// Include FreeRTOS common header
+#include "freertos/FreeRTOS.h"
+// Include FreeRTOS task API
+#include "freertos/task.h"
 // Include FreeRTOS task handling API
 #include "freeRTOS/semphr.h"
 
@@ -29,6 +35,10 @@ enum MENU_INPUT_t : uint8_t
 void init_menu();
 // From an interrupt-service-routine, add a new menu_input to the back of the menu input queue
 void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input);
+// Get the main display for the device
+LiquidCrystal_I2C *get_display();
+// Get the handle of the task that reads the menu input queue
+TaskHandle_t get_read_menu_input_queue_task_handle();
 
 // A line within a menu
 class MenuLine

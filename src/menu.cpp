@@ -1,9 +1,7 @@
-// Include Arduino-dependant I2C LED API
-#include <LiquidCrystal_I2C.h>
-// Include FreeRTOS queue API
-#include "freertos/queue.h"
 // Include custom menu class implementation
 #include "menu.h"
+// Include FreeRTOS queue API
+#include "freertos/queue.h"
 
 // Define the number of lines in menu_lines
 #define NUM_MENU_LINES 6
@@ -21,14 +19,20 @@
 
 // TODO: Make these members of Menu, so you can have multiple menus?
 QueueHandle_t menu_input_queue_handle;
+
+// Store the handle of the task reading the menu input queue
+TaskHandle_t read_menu_input_queue_task_handle;
+
 // Define statically allocated buffer for context mutex
 StaticSemaphore_t context_mutex_buffer;
+
 // Initialize display peripheral
 LiquidCrystal_I2C display(
     /* uint8_t lcd_Addr = */ DISPLAY_I2C_ADDR,
     /* uint8_t lcd_cols = */ NUM_DISPLAY_COLUMNS,
     /* uint8_t lcd_rows = */ NUM_DISPLAY_ROWS
 );
+
 // Create an instance of a context
 static Context context = { /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer };
 
@@ -91,7 +95,7 @@ static Menu menu = {
 // Define custom characters //
 // ======================== //
 
-// Define an enum to keep track of custom characer mapping
+// Define an enum to keep track of custom character mapping
 // See here for defining custom characters:
 // https://lastminuteengineers.com/esp32-i2c-lcd-tutorial/
 enum CUSTOM_CHAR_t : uint8_t
@@ -130,9 +134,18 @@ byte custom_char_filled_right_arrow[] = {
 // Functions for interacting with the menu input queue //
 // =================================================== //
 
+LiquidCrystal_I2C *get_display()
+{
+    return &display;
+}
+
+TaskHandle_t get_read_menu_input_queue_task_handle()
+{
+    return read_menu_input_queue_task_handle;
+}
+
 static void task_read_menu_input_queue();
 
-// TODO: Move the next 3 functions to menu member functions so multiple menus can exist?
 void init_menu()
 {
     // Initialize LCD display, clear anything on it, turn on the backlight, and print "Hello world!"
@@ -170,7 +183,6 @@ void init_menu()
 
     // Start task to read inputs added to queue
     // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
-    TaskHandle_t task_handle = nullptr;
     xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_menu_input_queue,
@@ -185,10 +197,12 @@ void init_menu()
         // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
         /* UBaseType_t uxPriority = */ 10,
         // Used to pass back a handle by which the created task can be referenced.
-        /* TaskHandle_t *const pxCreatedTask = */ &task_handle);
-    configASSERT(task_handle);
+        /* TaskHandle_t *const pxCreatedTask = */ &read_menu_input_queue_task_handle);
+    configASSERT(read_menu_input_queue_task_handle);
 }
 
+// Use non-member function, so many sources can write to the same input queue
+// Bound functions, such as member functions, can only be called, not used as pointers
 void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input)
 {
     // Write menu input GPIO pin number to queue holding all button presses
@@ -208,6 +222,7 @@ void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input)
     );
 }
 
+// Use non-member function, so multiple menus can read from the same input queue
 static void task_read_menu_input_queue()
 {
     // Get GPIO pin number from queue holding all button presses
@@ -256,7 +271,7 @@ MenuLine::MenuLine(
 bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
 {
     // Get the function to call based on the input received
-    // TODO: can use hashmap instead of switch statement, ex. func_to_call = funcs[MENU_INPUT_UP]
+    // NOTE: can use hashmap instead of switch statement, ex. func_to_call = funcs[MENU_INPUT_UP]
     bool (*func_to_call)() = nullptr;
     switch(input)
     {

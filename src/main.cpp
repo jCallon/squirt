@@ -11,8 +11,6 @@
 // 3. ESP32-WROOM-32 data sheet, pins, etc.
 //     https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf
 
-// Include Arduino APIs
-#include <Arduino.h>
 // Include custom button class implementation
 #include "button.h"
 // Include custom menu class implementation
