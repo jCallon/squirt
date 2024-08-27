@@ -34,7 +34,10 @@ LiquidCrystal_I2C display(
 );
 
 // Create an instance of a context
-static Context context = { /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer };
+static Context context = { 
+    /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer,
+    /* int pin_servo_out = */ PIN_SERVO_OUT
+};
 
 // Define the lines within the menu
 // Using C++ lambdas: https://en.cppreference.com/w/cpp/language/lambda
@@ -249,6 +252,42 @@ static void task_read_menu_input_queue()
     }
 }
 
+static void task_rotate_servo(Servo *servo)
+{
+    // Tasks must be implemented to never return (i.e. continuous loop)
+    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
+    while(1)
+    {
+        // Suspend this task until it is needed
+        vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ NULL);
+
+        // Turn off screen an other peripherals to save power
+        // NOTE: lol this destroys the display when I don't have an external power supply nevermind
+        //vTaskResume(/*TaskHandle_t xTaskToResume = */ get_toggle_sleep_mode_task_handle());
+
+        // TODO: put inside of task that can yield, add mutex for servo?
+        // Turn the servo to neutral position, wait a second, if it is not already in it
+        if (0 != servo->read())
+        {
+            servo->write(/* int value = */ 0);
+            vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
+        }
+
+        // Turn the servo to opposite of neutral position, wait a second
+        // TODO: This seems to turn a but more than 180 degrees, calibrate it using the library?
+        servo->write(/* int value = */ 180);
+        vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
+
+        // Turn the servo to neutral position, wait a second
+        servo->write(/* int value = */ 0);
+        vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
+
+        // Turn back on screen and other peripherals
+        // NOTE: lol this destroys the display when I don't have an external power supply nevermind
+        //vTaskResume(/*TaskHandle_t xTaskToResume = */ get_toggle_sleep_mode_task_handle());
+    }
+}
+
 // ========================= //
 // MenuLine member functions //
 // ========================= //
@@ -428,12 +467,36 @@ void Menu::update_display()
 // Context member functions //
 // ======================== //
 
-Context::Context(StaticSemaphore_t *mutex_buffer)
+Context::Context(
+    StaticSemaphore_t *mutex_buffer,
+    int pin_servo_out)
 {
     // Create mutex, open it for grabbing
     mutex_handle = xSemaphoreCreateMutexStatic(/* pxMutexBuffer = */ mutex_buffer);
     assert(nullptr != mutex_handle);
     xSemaphoreGive(/* xSempahore = */ mutex_handle);
+
+    // Attach servo
+    servo.attach(/* int pin = */ pin_servo_out);
+
+    // Create task to rotate servo motor an interupt can 'call'
+    // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
+    xTaskCreate(
+        // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
+        /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_rotate_servo,
+        // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
+        /* const char *const pcName = */ "rotate_servo",
+        // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        // Pointer that will be used as the parameter for the task being created.
+        /* void *const pvParameters = */ &servo,
+        // The priority at which the task should run.
+        // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
+        // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
+        /* UBaseType_t uxPriority = */ 10,
+        // Used to pass back a handle by which the created task can be referenced.
+        /* TaskHandle_t *const pxCreatedTask = */ &rotate_servo_task_handle);
+    configASSERT(rotate_servo_task_handle);
 
     // TODO: read setting from previous run
     percent_desired_humidity = 25;
@@ -465,7 +528,7 @@ bool Context::check_humidity()
 
 bool Context::spray()
 {
-    // TODO: make this code move the servo
+    vTaskResume(/* TaskHandle_t xTaskToResume = */ rotate_servo_task_handle);
     return true;
 }
 

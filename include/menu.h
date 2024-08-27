@@ -8,6 +8,8 @@
 #include <Arduino.h>
 // Include Arduino-dependant I2C LED API
 #include <LiquidCrystal_I2C.h>
+// Include Arduino-like servo motor API
+#include <ESP32Servo.h>
 // Include FreeRTOS common header
 #include "freertos/FreeRTOS.h"
 // Include FreeRTOS task API
@@ -21,6 +23,9 @@
 //#define PIN_I2C_DISPLAY_VCC VIN
 #define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_27)
 #define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_26)
+//#define PIN_SERVO_NEG GND
+//#define PIN_SERVO_POS VIN
+#define PIN_SERVO_OUT ((gpio_num_t) GPIO_NUM_25)
 
 enum MENU_INPUT_t : uint8_t
 {
@@ -109,7 +114,9 @@ class Context
 {
     public:
         // Constructor
-        Context(StaticSemaphore_t *mutex_buffer);
+        Context(
+            StaticSemaphore_t *mutex_buffer, 
+            int pin_servo_out);
         // TODO: comment
         bool check_humidity();
         // TODO: comment
@@ -127,6 +134,10 @@ class Context
     private:
         // A mutex to keep updating all members of this class thread-safe.
         SemaphoreHandle_t mutex_handle;
+        // A handle to the servo motor
+        Servo servo;
+        // A handle to a task that can be used to rotate the servo
+        TaskHandle_t rotate_servo_task_handle;
         // When the humidity sensor was last checked, what its reaing was.
         uint8_t percent_current_humidity;
         // When the humidity sensor is next checked, what to make the humidty at or above.

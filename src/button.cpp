@@ -112,7 +112,9 @@ static void task_toggle_sleep_mode()
     LiquidCrystal_I2C *display = get_display();
     TaskHandle_t read_menu_input_queue_task_handle = get_read_menu_input_queue_task_handle();
 
-    do
+    // Tasks must be implemented to never return (i.e. continuous loop)
+    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
+    while(1)
     {
         // Suspend this task until it is needed
         vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ NULL);
@@ -155,7 +157,7 @@ static void task_toggle_sleep_mode()
         }
 
         is_asleep = !is_asleep;
-    } while (1);
+    }
 }
 
 // Define event (interrupt) for a GPIO button press
@@ -288,9 +290,24 @@ bool Button::is_button_press()
     // 3) set button as unpressed once the first static happens
     // 4) ignore static for the next X ms
     // 5) repeat starting from 1
-    // TODO: Would disabling the interrupt within the ISR,
-    //       then having a timer renable it in X ms be more or less efficient?
-    //       Look at source code.
+
+#if 0
+    // It's possible to just disable interrupts on this pin instead for the next X milliseconds,
+    // but that would require creating a timer, which takes stack just like a task, so it doesn't seem worth it.
+    // Here's an example.
+    button->disable_intr();
+    // You must have configiUSE_TIMERS set to 1 for software timers to work (FreeRTOSConfig.h)
+    // CONFIG_TIMER_TASK_PRIORITY sets the priority (sdkconfig.h)
+    // CONFIG_TIMER_QUEUE_LENGTH is the queue length (sdkconfig.h)
+    // CONFIG_TIMER_STACK_DEPTH is the stack size in words in Vanilla FreeRTOS, bytes in ESP32 modified (sdkconfig.h)
+    // https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/system/freertos_idf.html?
+    TimerHandle_t xTimerCreate(
+        /* const char *const pcTimerName = */ "gpio_intr_on",
+        /* const TickType_t xTimerPeriodInTicks = */ pdMS_TO_TICKS(100),
+        /* const BaseType_t xAutoReload = */ false,
+        /* void *const pvTimerID = */ 0,
+    /* TimerCallbackFunction_t pxCallbackFunction = */ [](TimerHandle_t xTimer) { button->enable_intr(); });
+#endif
 
     // Get current milliseconds
     // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/esp_timer.html
