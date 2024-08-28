@@ -8,8 +8,6 @@
 #include <Arduino.h>
 // Include Arduino-dependant I2C LED API
 #include <LiquidCrystal_I2C.h>
-// Include Arduino-like servo motor API
-#include <ESP32Servo.h>
 // Include FreeRTOS common header
 #include "freertos/FreeRTOS.h"
 // Include FreeRTOS task API
@@ -23,9 +21,14 @@
 //#define PIN_I2C_DISPLAY_VCC VIN
 #define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_27)
 #define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_26)
-//#define PIN_SERVO_NEG GND
-//#define PIN_SERVO_POS VIN
-#define PIN_SERVO_OUT ((gpio_num_t) GPIO_NUM_25)
+
+// Define display constants
+// Define I2C address for display, see your manufacturer notes to figure out yours
+#define DISPLAY_I2C_ADDR 0x27
+// Define the number of rows in the LCD display (the number of lines of characters)
+#define NUM_DISPLAY_ROWS 4
+// Define the number of columns in the LCD display (the number of characters in each line)
+#define NUM_DISPLAY_COLUMNS 20
 
 enum MENU_INPUT_t : uint8_t
 {
@@ -45,7 +48,7 @@ LiquidCrystal_I2C *get_display();
 // Get the handle of the task that reads the menu input queue
 TaskHandle_t get_read_menu_input_queue_task_handle();
 
-// A line within a menu
+// A line within a Menu
 class MenuLine
 {
     public:
@@ -107,47 +110,6 @@ class Menu
         size_t index_menu_item_hover;
         // Whether a menu item is currently selected, so menu inputs should be forwarded to the MenuLine's handlers instead of navigating Menu
         bool is_menu_item_selected;
-};
-
-// The overall state the menu display and the sensors operate on
-class Context
-{
-    public:
-        // Constructor
-        Context(
-            StaticSemaphore_t *mutex_buffer, 
-            int pin_servo_out);
-        // TODO: comment
-        bool check_humidity();
-        // TODO: comment
-        bool spray();
-        // Menu functions
-        // TODO: Is there a better way to do this? Arguments? Lambdas?
-        bool add_percent_desired_humidity();
-        bool add_minute_humidity_check_freq();
-        bool subtract_percent_desired_humidity();
-        bool subtract_minute_humidity_check_freq();
-        String str_percent_desired_humidity();
-        String str_minute_humidity_check_freq();
-        String str_time_last_humidity_check();
-        String str_time_next_humidity_check();
-    private:
-        // A mutex to keep updating all members of this class thread-safe.
-        SemaphoreHandle_t mutex_handle;
-        // A handle to the servo motor
-        Servo servo;
-        // A handle to a task that can be used to rotate the servo
-        TaskHandle_t rotate_servo_task_handle;
-        // When the humidity sensor was last checked, what its reaing was.
-        uint8_t percent_current_humidity;
-        // When the humidity sensor is next checked, what to make the humidty at or above.
-        uint8_t percent_desired_humidity;
-        // How often to check the current humidity, in minutes.
-        uint32_t minute_humidity_check_freq;
-        // The time when the humidity was last checked.
-        time_t time_last_humidity_check;
-        // The time when the humidity should next be checked.
-        time_t time_next_humidity_check;
 };
 
 #endif // __MENU_H__
