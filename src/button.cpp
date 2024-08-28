@@ -8,9 +8,9 @@
 // 4. A tutorial on how to debounce your buttons.
 //    https://esp32io.com/tutorials/esp32-button-debounce
 
-// Include custom button class implementation
+// Include custom Button class implementation
 #include "button.h"
-// Include custom menu class implementation
+// Include custom Menu class implementation
 #include "menu.h"
 
 // ======================= //

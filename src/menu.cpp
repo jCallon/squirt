@@ -1,6 +1,6 @@
-// Include custom menu class implementation
+// Include custom Menu class implementation
 #include "menu.h"
-// Include custom context class implementation
+// Include custom Context class implementation
 #include "context.h"
 // Include FreeRTOS queue API
 #include "freertos/queue.h"
@@ -35,7 +35,8 @@ StaticSemaphore_t context_mutex_buffer;
 // Create an instance of a context
 static Context context = { 
     /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer,
-    /* int pin_servo_out = */ PIN_SERVO_OUT
+    /* int pin_servo_out = */ PIN_SERVO_OUT,
+    /* gpio_num_t arg_pin_soil_moisture_sensor_in = */ PIN_SOIL_MOISTURE_SENSOR_IN
 };
 
 // Define the lines within the menu
