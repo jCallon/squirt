@@ -1,8 +1,6 @@
 #ifndef __CONTEXT_H__
 #define __CONTEXT_H__
 
-// Include Arduino APIs
-#include <Arduino.h>
 // Include Arduino-like servo motor API
 #include <ESP32Servo.h>
 // Include FreeRTOS common header
@@ -20,9 +18,6 @@
 //#define PIN_SOIL_MOISTURE_SENSOR_NEG GND
 //#define PIN_SOIL_MOISTURE_SENSOR_POS VIN
 #define PIN_SOIL_MOISTURE_SENSOR_IN ((gpio_num_t) GPIO_NUM_0)
-
-// Define a task for if you want to rotate the servo
-void task_rotate_servo(Servo *servo);
 
 enum CONTEXT_MEMBER_t
 {
@@ -49,9 +44,9 @@ class Context
             gpio_num_t arg_pin_soil_moisture_sensor_in);
         // Poll the humidity sensor, update context with its reading,
         // the time of its reading, and when the next reading should be
-        bool check_humidity();
+        bool check_humidity(bool in_isr);
         // Send signals to the servo motor to move
-        bool spray();
+        bool spray(bool in_isr);
 
         // Get a member of Context, thread-safely
         bool get(
@@ -104,6 +99,9 @@ class Context
         // The time when the humidity should next be checked
         time_t time_next_humidity_check;
 };
+
+// Define a task for if you want to rotate the servo
+void task_rotate_servo(Servo *servo);
 
 // Define a task for if you want to reach a desired humidity
 void task_water(Context *context);

@@ -2,6 +2,8 @@
 #include "menu.h"
 // Include custom Context class implementation
 #include "context.h"
+// Include custom debug macros
+#include "flags.h"
 // Include FreeRTOS queue API
 #include "freertos/queue.h"
 
@@ -41,7 +43,7 @@ static Context context = {
 
 // Define the lines within the menu
 // Using C++ lambdas: https://en.cppreference.com/w/cpp/language/lambda
-// TODO: make context an argument so multiple contexts can be controled by this menu
+// TODO: make context an argument so multiple contexts can be controlled by this menu
 static MenuLine menu_lines[NUM_MENU_LINES] = 
 {
     {
@@ -76,14 +78,14 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
         /* String str_display = */ String("Check X"),
         /* String (*arg_func_to_str)() = */ nullptr,
         /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ []() { return context.check_humidity(); },
+        /* bool (*arg_func_on_confirm)() = */ []() { return context.check_humidity(/* bool in_isr = */ false); },
         /* bool (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String("Trigger spray"),
         /* String (*arg_func_to_str)() = */ nullptr,
         /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ []() { return context.spray(); },
+        /* bool (*arg_func_on_confirm)() = */ []() { return context.spray(/* bool in_isr = */ false); },
         /* bool (*arg_func_on_down)() = */ nullptr
     }
 };
@@ -151,7 +153,7 @@ TaskHandle_t get_read_menu_input_queue_task_handle()
 // Functions for interacting with the menu input queue //
 // =================================================== //
 
-static void task_read_menu_input_queue();
+void task_read_menu_input_queue();
 
 void init_menu()
 {
@@ -180,16 +182,10 @@ void init_menu()
     menu_input_queue_handle = xQueueCreate(
         /* uxQueueLength = */ 10,
         /* uxItemSize = */ sizeof(MENU_INPUT_t));
-
-    // If the queue failed to create, abort
-    if(0 == menu_input_queue_handle)
-    {
-        Serial.print("Failed to create menu input queue, aborting");
-        abort();
-    }
+    configASSERT(menu_input_queue_handle);
 
     // Start task to read inputs added to queue
-    // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
+    // TODO: Look into static memory allocation instead?
     xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_menu_input_queue,
@@ -230,7 +226,7 @@ void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input)
 }
 
 // Use non-member function, so multiple menus can read from the same input queue
-static void task_read_menu_input_queue()
+void task_read_menu_input_queue()
 {
     // Get GPIO pin number from queue holding all button presses
     MENU_INPUT_t menu_input = MENU_INPUT_NONE;
@@ -253,6 +249,9 @@ static void task_read_menu_input_queue()
             // Use the menu input to manipulated the menu
             menu.react_to_menu_input(/* MENU_INPUT_t menu_input = */ menu_input);
         }
+
+        // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 308
+        PRINT_STACK_USAGE();
     }
 }
 

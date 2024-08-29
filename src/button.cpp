@@ -12,6 +12,8 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
+// Include custom debug macros
+#include "flags.h"
 
 // ======================= //
 // Instantiate useful data //
@@ -84,14 +86,14 @@ void init_buttons()
 #endif
 
     // Create task for sleep mode that can simply be resumed from an interrupt, reducing interrupt length
-    // TODO: Look into static allocation and reduced stack usage, this task isn't heavy
+    // TODO: Look into static allocation instead?
     (void) xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_toggle_sleep_mode,
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "toggle_sleep",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 256,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ NULL,
         // The priority at which the task should run.
@@ -157,6 +159,9 @@ static void task_toggle_sleep_mode()
         }
 
         is_asleep = !is_asleep;
+
+        // 24AUG2024: usStackDepth = 1024 + 256, uxTaskGetHighWaterMark = 188
+        PRINT_STACK_USAGE();
     }
 }
 
@@ -202,7 +207,7 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
     // Write button input as menu input in menu input queue
     if (PIN_BUTTON_SLEEP_IN == gpio_pin)
     {
-        vTaskResume(/* TaskHandle_t xTaskToResume = */ toggle_sleep_mode_task_handle);
+        (void) xTaskResumeFromISR(/* TaskHandle_t xTaskToResume = */ toggle_sleep_mode_task_handle);
         return;
     }
     from_isr_add_to_menu_input_queue(menu_input);

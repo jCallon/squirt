@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Include Arduino APIs
-#include <Arduino.h>
 // Include Arduino-dependant I2C LED API
 #include <LiquidCrystal_I2C.h>
 // Include FreeRTOS common header

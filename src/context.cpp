@@ -2,6 +2,8 @@
 #include "context.h"
 // Include custom Menu class implementation
 #include "menu.h"
+// Include custom debug macros
+#include "flags.h"
 
 // ======================================= //
 // Define reusable tasks, interrupts, etc. //
@@ -28,7 +30,7 @@ void task_rotate_servo(Servo *servo)
         }
 
         // Turn the servo to opposite of neutral position, wait a second
-        // TODO: This seems to turn a but more than 180 degrees, calibrate it using the library?
+        // TODO: This seems to turn a bit more than 90 degrees, calibrate it using the library?
         servo->write(/* int value = */ 90);
         vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
 
@@ -39,6 +41,9 @@ void task_rotate_servo(Servo *servo)
         // Turn back on screen and other peripherals
         // NOTE: lol this destroys the display when I don't have an external power supply nevermind
         //vTaskResume(/*TaskHandle_t xTaskToResume = */ get_toggle_sleep_mode_task_handle());
+
+        // 24AUG2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 352
+        PRINT_STACK_USAGE();
     }
 }
 
@@ -106,6 +111,9 @@ void task_water(Context *context)
                 /* void *dst = */ (void *) &percent_desired_humidity,
                 /* size_t num_bytes_dst = */ sizeof(percent_desired_humidity));
         }
+
+        // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
+        PRINT_STACK_USAGE();
     }
 }
 
@@ -130,14 +138,14 @@ Context::Context(
     pin_soil_moisture_sensor_in = arg_pin_soil_moisture_sensor_in;
 
     // Create task to rotate servo motor an interupt can 'call'
-    // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
+    // TODO: Look into static memory allocation instead?
     xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_rotate_servo,
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "rotate_servo",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ &servo,
         // The priority at which the task should run.
@@ -149,7 +157,7 @@ Context::Context(
     configASSERT(rotate_servo_task_handle);
 
     // Create task to get to the desired humidity an interupt can 'call'
-    // TODO: Look into static memory instead of heap memory task creation, better? Better arguments?
+    // TODO: Look into static memory allocation instead?
     xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_water,
@@ -172,23 +180,37 @@ Context::Context(
     // TODO: read setting from previous run
     minute_humidity_check_freq = 100;
 
-    check_humidity();
+    check_humidity(/* bool in_isr = */ false);
 }
 
-bool Context::check_humidity()
+bool Context::check_humidity(bool in_isr)
 {
     // Run task_water
     // TODO: properly schedule it at time_next_humidity_check
-    vTaskResume(/* TaskHandle_t xTaskToResume = */ water_task_handle);
+    if(true == in_isr)
+    {
+        (void) xTaskResumeFromISR(/* TaskHandle_t xTaskToResume = */ water_task_handle);
+    }
+    else
+    {
+        vTaskResume(/* TaskHandle_t xTaskToResume = */ water_task_handle);
+    }
 
     // Return control to the menu
     return true;
 }
 
-bool Context::spray()
+bool Context::spray(bool in_isr)
 {
     // Run task_rotate_servo
-    vTaskResume(/* TaskHandle_t xTaskToResume = */ rotate_servo_task_handle);
+    if(true == in_isr)
+    {
+        (void) xTaskResumeFromISR(/* TaskHandle_t xTaskToResume = */ rotate_servo_task_handle);
+    }
+    else
+    {
+        vTaskResume(/* TaskHandle_t xTaskToResume = */ rotate_servo_task_handle);
+    }
 
     // Return control to the menu
     return true;

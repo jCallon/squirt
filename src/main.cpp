@@ -15,6 +15,8 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
+// Include custom debug macros
+#include "flags.h"
 
 // =========================== //
 // Initialize and start device //
@@ -23,10 +25,12 @@
 // Start program
 void setup()
 {
+#if PRINT
     // Initialize Arduino serial console
     Serial.begin(/* unsigned long baud = */ 115200);
     // Wait for serial port to connect
     while(!Serial);
+#endif
 
     // Initialze menu and its input queue/task
     init_menu();
