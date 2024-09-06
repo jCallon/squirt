@@ -8,8 +8,10 @@
 #if PRINT
 #include <Arduino.h>
 #define s_print(...) Serial.print(__VA_ARGS__)
+#define s_println(...) Serial.println(__VA_ARGS__)
 #else
 #define s_print(...) (void) 0
+#define s_println(...) (void) 0
 #endif
 
 // Define whether you want each task to print out its stack usage.
@@ -24,5 +26,8 @@
 #else
 #define PRINT_STACK_USAGE (void) 0
 #endif // PRINT_STACK_DIAGNOSTICS
+
+// Define whether you want to compile the code to WiFi-enable this project, which takes more memory and power
+#define WIFI_ENABLED 1
 
 #endif // __FLAGS_H__

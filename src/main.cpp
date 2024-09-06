@@ -17,6 +17,10 @@
 #include "menu.h"
 // Include custom debug macros
 #include "flags.h"
+#if WIFI_ENABLED
+// Include custom wifi API
+#include "wifi.h"
+#endif
 
 // =========================== //
 // Initialize and start device //
@@ -36,6 +40,11 @@ void setup()
     init_menu();
     // Initialize GPIO buttons and their interrupts
     init_buttons();
+
+#if WIFI_ENABLED
+    configASSERT(connect_wifi());
+    configASSERT(connect_tcp_server());
+#endif
 }
 
 // Don't have any need for a loop that runs forever, because we're using FreeRTOS tasks,
