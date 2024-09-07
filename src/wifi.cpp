@@ -19,22 +19,49 @@
 // Include WiFi credentials
 // TODO: Is there a better way to do this? Do I care? Eventually I may implement just being able to search among many WiFi networks.
 #include "credentials.h"
-#ifndef WIFI_SSID
-#error "Please make a include/credentials.h, and in it, #define WIFI_SSID \"your_wifi_nickname\", then pad with as many \0 as needed."
-#endif // WIFI_SSID
-#ifndef WIFI_PASSWORD
-#error "Please make a include/credentials.h, and in it, #define WIFI_PASSWORD \"your_wifi_password\", then pad with as many \0 as needed."
-#endif // WIFI_PASSWORD
+#if !defined(WIFI_SSID) || !defined(WIFI_PASSWORD) || !defined(TCP_SERVER_IP_ADDR) || !defined(TCP_SERVER_PORT)
+#error Please make a file called credentials.h in the include directory.\n\
+It should look like this. Never post your credentials.h somewhere public.\n\
+#ifndef __CREDENTIALS_H__\n\
+#define __CREDENTIALS_H__\n\
+\n\
+// Nickname for WiFi AP to connect to\n\
+#define WIFI_SSID "My WiFi network"\n\
+// Password for WiFi AP to connect to\n\
+#define WIFI_PASSWORD "my_wifi_password"\n\
+// IPv4 address of TCP server to connect to, represented as hexidecimal 32 bit integer\n\
+// ex: The address 1.2.3.4, because each number between the dots is a 1-byte value,\n\
+// there are 4 numbers, and network order is big-endian, is equal to 0x04030201.\n\
+#define TCP_SERVER_IP_ADDR 0x04030201\n\
+// The port number for the TCP server to connect to\n\
+#define TCP_SERVER_PORT 12345\n\
+\n\
+#endif // __CREDENTIALS_H__"
+#endif // !defined(WIFI_SSID) || !defined(WIFI_PASSWORD) || !defined(TCP_SERVER_IP_ADDR) || !defined(TCP_SERVER_PORT)
+
+// To create a TCP connection with a Windows computer connected to the same WiFi router, try these steps:
+// 1. Install https://nmap.org/download#windows
+// 2. Make sure to have it enabled for public networks. Just private networks didn't seem to work for me.
+//    You can do this during the install, and manually later via Windows Defender Firewall with Advanced Security -> Inbound Rules ->
+//    Name: ncat, profile: Public, Protocol: TCP -> right click to enable, you can limit the ports from this menu if you'd like
+// 3. Get the IPv4 address of your computer, #define TCP_SERVER_IP_ADDR as it.
+//    You can find this do this by running "ipconfig" in Powershell -> Wireless LAN adapter Wi-Fi: -> IPv4 Address
+// 3. Open a TCP port on your computer, #define TCP_SERVER_PORT as it
+//    In PowerShell, use the command "ncat -l SOME_PORT_NUMBER", launch or restart the ESP32,
+//    and type something in the Powershell for it to transit to the ESP32.
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
 // Resources:
-// - https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_netif.html
-// - https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/esp_event.html
-// - https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
-// - https://github.com/espressif/esp-idf/blob/v5.3.1/examples/wifi/getting_started/station/main/station_example_main.c
-// - https://www.youtube.com/watch?v=_dRrarmQiAM
+// - Create a basic POSIX TPC/IP server in C:
+//   https://medium.com/@coderx_15963/basic-tcp-ip-networking-in-c-using-posix-9a074d65bb35
+// - How to connect your ESP32 to Wifi and an existing POSIX TCP/IP server:
+//   https://www.youtube.com/watch?v=_dRrarmQiAM
+//   https://github.com/espressif/esp-idf/blob/v5.3.1/examples/wifi/getting_started/station/main/station_example_main.c
+//   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_netif.html
+//   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/esp_event.html
+//   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
 
 #define NUM_MAX_WIFI_CONNECT_RETRIES 5
 size_t num_wifi_connect_retries = 0;
@@ -57,19 +84,24 @@ static void event_any_wifi(
     {
         case WIFI_EVENT_STA_START:
             // Connect to WiFi for the first time
-            s_println("Connecting to AP\n");
+            s_println("Connecting to AP");
             (void) esp_wifi_connect();
             break;
         case WIFI_EVENT_STA_DISCONNECTED:
-            if(num_wifi_connect_retries <= NUM_MAX_WIFI_CONNECT_RETRIES)
+            if(num_wifi_connect_retries < NUM_MAX_WIFI_CONNECT_RETRIES)
             {
                 // Try to connect to WiFi again
-                s_println("Reconnecting to AP\n");
+                s_print("Reconnecting to AP (attempt ");
+                s_print(num_wifi_connect_retries, DEC);
+                s_println(")");
                 (void) esp_wifi_connect();
                 ++num_wifi_connect_retries;
             }
             else
             {
+                s_print("Could not connect to AP with max retries (");
+                s_print(NUM_MAX_WIFI_CONNECT_RETRIES, DEC);
+                s_println("). Marking connection as having failed.");
                 // Set bits for WiFi event group, unblocking tasks waiting for bits
                 (void) xEventGroupSetBits(
                     /* EventGroupHandle_t xEventGroup = */ event_group_handle_wifi,
@@ -99,8 +131,19 @@ static void event_got_ip(
     switch(event_id)
     {
         case IP_EVENT_STA_GOT_IP:
-            s_print("Got STA IP: ");
-            //s_println(IP2STR(&(((ip_event_got_ip_t *) event_data)->ip_info.ip)));
+            // Need scope to be able to create local variable
+            s_print("Got station IP address: ");
+            {
+                ip_event_got_ip_t *got_ip_event = (ip_event_got_ip_t *) event_data;
+                // TODO: Use IP2STR instead, it's just incompatible with Arduino print
+                s_print(esp_ip4_addr1_16(&(got_ip_event->ip_info.ip)), DEC);
+                s_print(".");
+                s_print(esp_ip4_addr2_16(&(got_ip_event->ip_info.ip)), DEC);
+                s_print(".");
+                s_print(esp_ip4_addr3_16(&(got_ip_event->ip_info.ip)), DEC);
+                s_print(".");
+                s_println(esp_ip4_addr4_16(&(got_ip_event->ip_info.ip)), DEC);
+            }
             num_wifi_connect_retries = 0;
             // Set bits for IP event group, unblocking tasks waiting for bits
             (void) xEventGroupSetBits(
@@ -233,7 +276,9 @@ bool connect_wifi()
     vEventGroupDelete(/* EventGroupHandle_t xEventGroup = */ event_group_handle_wifi);
     
     // Return result of overall operation
-    return (bool) (event_bits & WIFI_CONNECTED_BIT);
+    bool status = (event_bits & WIFI_CONNECTED_BIT) > 0;
+    s_println((true == status) ? "Connected to AP" : "Failed to connect to AP");
+    return status;
 
 #if 0
     // Support 2.3G or 5G, I don't personally care about this or the bandwidth, and i don't kn0ow what channel means, promiscuous, vendor ie, disabling or enabling certain kinds of events, configuring an antenna lol, rssi,ftm,bitrte
@@ -263,13 +308,10 @@ bool connect_tcp_server()
     // Give the protocol family that will be used for this server
     server_info.sin_family = AF_INET;
     // Set server address to some hard-coded IP address
-    // TODO: where does this hard-coded value come from?
-    server_info.sin_addr.s_addr = 0x8200140a;
+    server_info.sin_addr.s_addr = TCP_SERVER_IP_ADDR;
     // Set the port by converting some hard-coded value to from host-byte-order to network byte order
-    // TODO: where does this hard-coded value come from?
     // https://linux.die.net/man/3/htons
-    server_info.sin_port = htons(/* uint32_t hostlong = */ 12345);
-    
+    server_info.sin_port = htons(/* uint32_t hostlong = */ TCP_SERVER_PORT);
     // Get a file descriptor to use as an endpoint for communcation
     // https://www.man7.org/linux/man-pages/man2/socket.2.html
     const int file_descriptor = socket(

@@ -42,8 +42,10 @@ void setup()
     init_buttons();
 
 #if WIFI_ENABLED
-    configASSERT(connect_wifi());
-    configASSERT(connect_tcp_server());
+    if(true == connect_wifi())
+    {
+        connect_tcp_server();
+    }
 #endif
 }
 
