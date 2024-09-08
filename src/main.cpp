@@ -87,7 +87,7 @@ void setup()
             /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
             /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
     }
-#endif
+#endif // WIFI_ENABLED
 }
 
 // Don't have any need for a loop that runs forever, because we're using FreeRTOS tasks,

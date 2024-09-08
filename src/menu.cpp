@@ -236,10 +236,11 @@ void add_to_menu_input_queue(
         // The size of the items the queue will hold was defined when the queue was created,
         // so this many bytes will be copied from pvItemToQueue into the queue storage area.
         /* const void *const pvItemToQueue = */ &menu_input,
-        // xQueueGenericSendFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE if sending to the queue caused a task to unblock,
-        // and the unblocked task has a priority higher than the currently running task.
-        // If xQueueGenericSendFromISR() sets this value to pdTRUE then a context switch should be requested before the interrupt is exited.
-        /* BaseType_t *const pxHigherPriorityTaskWoken = */ NULL
+        // The maximum amount of time the task should block waiting for space to become 
+        // available on the queue, should it already be full. The call will return immediately
+        // if this is set to 0 and the queue is full. The time is defined in tick periods so 
+        // the constant portTICK_PERIOD_MS should be used to convert to real time if this is required.
+        /* TickType_t xTicksToWait = */ pdMS_TO_TICKS(10)
     );
 }
 

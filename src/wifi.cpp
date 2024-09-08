@@ -77,7 +77,8 @@ ip_command_t ip_commands[NUM_IP_COMMANDS] = {
 
 void task_read_ip_packets()
 {
-    // TODO: Why did the buttons stop working? Add connection to task?
+    // TODO: Why did the buttons stop working?
+    //       Even when I don't compile WiFi, they've stopped working. Did something fry? Did some software change? When did it last work?
 
     // Create a 0-initiaized buffer IP packets will be read into
     char read_buffer[16] = { 0 };
@@ -85,9 +86,6 @@ void task_read_ip_packets()
 
     while(1)
     {
-        // TODO: are buttons not responding because this task doesn't yield, has an inerrupt blocking others? How do I fix tht? How does read work?
-        // Disable connect_wifi and connect_tcp, see how much it helps, then just connect_tcp
-
         // Get the number of bytes in the file descriptor,
         // copy up to count bytes from the file descriptor to our read buffer
         // https://man7.org/linux/man-pages/man2/read.2.html
@@ -99,6 +97,7 @@ void task_read_ip_packets()
         {
             // Failed to read the file descriptor, stop this task and free its resources
             s_println("Failed to read IP packet file descriptor, stopping task to read IP packets");
+            close(/* int fd = */ ip_socket_file_descriptor);
             ip_socket_file_descriptor = 0;
             read_ip_packet_task_handle = nullptr;
             vTaskDelete(/* TaskHandle_t xTaskToDelete = */ NULL);
@@ -395,6 +394,27 @@ bool connect_tcp_server(
         return false;
     }
 
+#if 0
+    // Is this better before or after connect? Is it already non-blocking? I assumed because the buttons stopped working.
+    // Make file descriptor operations non-blocking, so other tasks and interrupts can run while the pipe is empty
+    // https://www.linuxtoday.com/blog/blocking-and-non-blocking-i-0/
+    // https://man7.org/linux/man-pages/man2/fcntl.2.html
+    if(0 > fcntl(
+        /* int fd = */ ip_socket_file_descriptor,
+        /* int op = */ F_SETFL,
+        /* ... = */ O_NONBLOCK | fcntl(
+            /* int fd = */ ip_socket_file_descriptor,
+            /* int op = */ F_GETFL,
+            /* ... = */ O_NONBLOCK)))
+    {
+        s_print("Failed to modify socket file descriptor of: ");
+        s_println(inet_ntoa(/* struct in_addr in = */ server_info.sin_addr.s_addr));
+        close(/* int fd = */ ip_socket_file_descriptor);
+        ip_socket_file_descriptor = 0;
+        return false;
+    }
+#endif
+
     // Connect to the server, whose IP address and port is given to us by server_info
     // https://man7.org/linux/man-pages/man2/connect.2.html
     // https://linux.die.net/man/3/inet_ntoa
@@ -407,6 +427,7 @@ bool connect_tcp_server(
         s_print("Failed to connect to: ");
         s_println(inet_ntoa(/* struct in_addr in = */ server_info.sin_addr.s_addr));
         close(/* int fd = */ ip_socket_file_descriptor);
+        ip_socket_file_descriptor = 0;
         return false;
     }
 
