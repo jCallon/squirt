@@ -206,12 +206,30 @@ void init_menu()
 
 // Use non-member function, so many sources can write to the same input queue
 // Bound functions, such as member functions, can only be called, not used as pointers
-void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input)
+void add_to_menu_input_queue(
+    MENU_INPUT_t menu_input,
+    bool from_isr)
 {
     // Write menu input GPIO pin number to queue holding all button presses
     // Remember, non-ISR queue access is not safe from within interrupts!
     // Don't care about the return value, I am ok with losing some button inputs
-    (void) xQueueSendFromISR(
+    if(from_isr)
+    {
+        (void) xQueueSendFromISR(
+            // The handle to the queue on which the item is to be posted.
+            /* QueueHandle_t xQueue = */ menu_input_queue_handle,
+            // A pointer to the item that is to be placed on the queue.
+            // The size of the items the queue will hold was defined when the queue was created,
+            // so this many bytes will be copied from pvItemToQueue into the queue storage area.
+            /* const void *const pvItemToQueue = */ &menu_input,
+            // xQueueGenericSendFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE if sending to the queue caused a task to unblock,
+            // and the unblocked task has a priority higher than the currently running task.
+            // If xQueueGenericSendFromISR() sets this value to pdTRUE then a context switch should be requested before the interrupt is exited.
+            /* BaseType_t *const pxHigherPriorityTaskWoken = */ NULL
+        );
+        return;
+    }
+    (void) xQueueSend(
         // The handle to the queue on which the item is to be posted.
         /* QueueHandle_t xQueue = */ menu_input_queue_handle,
         // A pointer to the item that is to be placed on the queue.

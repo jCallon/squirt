@@ -210,7 +210,9 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
         (void) xTaskResumeFromISR(/* TaskHandle_t xTaskToResume = */ toggle_sleep_mode_task_handle);
         return;
     }
-    from_isr_add_to_menu_input_queue(menu_input);
+    add_to_menu_input_queue(
+        /* MENU_INPUT_t menu_input = */ menu_input,
+        /* bool from_isr = */ true);
 }
 
 // ======================= //

@@ -39,8 +39,10 @@ enum MENU_INPUT_t : uint8_t
 
 // Initialze menu and its input queue/task
 void init_menu();
-// From an interrupt-service-routine, add a new menu_input to the back of the menu input queue
-void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input);
+// Add a new menu_input to the back of the menu input queue
+void add_to_menu_input_queue(
+    MENU_INPUT_t menu_input,
+    bool from_isr);
 // Get the main display for the device
 LiquidCrystal_I2C *get_display();
 // Get the handle of the task that reads the menu input queue

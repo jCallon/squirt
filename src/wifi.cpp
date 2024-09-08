@@ -16,39 +16,8 @@
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
 
-// Include WiFi credentials
-// TODO: Is there a better way to do this? Do I care? Eventually I may implement just being able to search among many WiFi networks.
-#include "credentials.h"
-#if !defined(WIFI_SSID) || !defined(WIFI_PASSWORD) || !defined(TCP_SERVER_IP_ADDR) || !defined(TCP_SERVER_PORT)
-#error Please make a file called credentials.h in the include directory.\n\
-It should look like this. Never post your credentials.h somewhere public.\n\
-#ifndef __CREDENTIALS_H__\n\
-#define __CREDENTIALS_H__\n\
-\n\
-// Nickname for WiFi AP to connect to\n\
-#define WIFI_SSID "My WiFi network"\n\
-// Password for WiFi AP to connect to\n\
-#define WIFI_PASSWORD "my_wifi_password"\n\
-// IPv4 address of TCP server to connect to, represented as hexidecimal 32 bit integer\n\
-// ex: The address 1.2.3.4, because each number between the dots is a 1-byte value,\n\
-// there are 4 numbers, and network order is big-endian, is equal to 0x04030201.\n\
-#define TCP_SERVER_IP_ADDR 0x04030201\n\
-// The port number for the TCP server to connect to\n\
-#define TCP_SERVER_PORT 12345\n\
-\n\
-#endif // __CREDENTIALS_H__"
-#endif // !defined(WIFI_SSID) || !defined(WIFI_PASSWORD) || !defined(TCP_SERVER_IP_ADDR) || !defined(TCP_SERVER_PORT)
-
-// To create a TCP connection with a Windows computer connected to the same WiFi router, try these steps:
-// 1. Install https://nmap.org/download#windows
-// 2. Make sure to have it enabled for public networks. Just private networks didn't seem to work for me.
-//    You can do this during the install, and manually later via Windows Defender Firewall with Advanced Security -> Inbound Rules ->
-//    Name: ncat, profile: Public, Protocol: TCP -> right click to enable, you can limit the ports from this menu if you'd like
-// 3. Get the IPv4 address of your computer, #define TCP_SERVER_IP_ADDR as it.
-//    You can find this do this by running "ipconfig" in Powershell -> Wireless LAN adapter Wi-Fi: -> IPv4 Address
-// 3. Open a TCP port on your computer, #define TCP_SERVER_PORT as it
-//    In PowerShell, use the command "ncat -l SOME_PORT_NUMBER", launch or restart the ESP32,
-//    and type something in the Powershell for it to transit to the ESP32.
+// Include custom Menu class implementation
+#include "menu.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
@@ -64,8 +33,95 @@ It should look like this. Never post your credentials.h somewhere public.\n\
 //   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
 
 #define NUM_MAX_WIFI_CONNECT_RETRIES 5
+
 size_t num_wifi_connect_retries = 0;
-EventGroupHandle_t event_group_handle_wifi = 0;
+EventGroupHandle_t event_group_handle_wifi = nullptr;
+int ip_socket_file_descriptor = 0;
+TaskHandle_t read_ip_packet_task_handle = nullptr;
+
+// Declare possible IP commands
+#define NUM_IP_COMMANDS 3
+typedef struct ip_command_s {
+    const char* command;
+    void (*action)();
+} ip_command_t;
+
+ip_command_t ip_commands[NUM_IP_COMMANDS] = {
+    {
+        .command = "up",
+        .action = []() { add_to_menu_input_queue(
+            /* MENU_INPUT_t menu_input = */ MENU_INPUT_UP,
+            /* bool from_isr = */ false); },
+    },
+    {
+        .command = "down",
+        .action = []() { add_to_menu_input_queue(
+            /* MENU_INPUT_t menu_input = */ MENU_INPUT_DOWN,
+            /* bool from_isr = */ false); },
+    },
+    {
+        .command = "confirm",
+        .action = []() { add_to_menu_input_queue(
+            /* MENU_INPUT_t menu_input = */ MENU_INPUT_CONFIRM,
+            /* bool from_isr = */ false); },
+    },
+#if 0
+    {
+        .command = "sleep",
+        .action = []() { add_to_menu_input_queue(
+            /* MENU_INPUT_t menu_input = */ MENU_INPUT_SLEEP,
+            /* bool from_isr = */ false); },
+    },
+#endif
+};
+
+void task_read_ip_packets()
+{
+    // TODO: Why did the buttons stop working? Add connection to task?
+
+    // Create a 0-initiaized buffer IP packets will be read into
+    char read_buffer[16] = { 0 };
+    int num_read_bytes = 0;
+
+    while(1)
+    {
+        // TODO: are buttons not responding because this task doesn't yield, has an inerrupt blocking others? How do I fix tht? How does read work?
+        // Disable connect_wifi and connect_tcp, see how much it helps, then just connect_tcp
+
+        // Get the number of bytes in the file descriptor,
+        // copy up to count bytes from the file descriptor to our read buffer
+        // https://man7.org/linux/man-pages/man2/read.2.html
+        num_read_bytes = read(
+            /* int fd = */ ip_socket_file_descriptor,
+            /* void buf[.count] = */ read_buffer,
+            /* size_t count = */ sizeof(read_buffer) - 1);
+        if(0 > num_read_bytes)
+        {
+            // Failed to read the file descriptor, stop this task and free its resources
+            s_println("Failed to read IP packet file descriptor, stopping task to read IP packets");
+            ip_socket_file_descriptor = 0;
+            read_ip_packet_task_handle = nullptr;
+            vTaskDelete(/* TaskHandle_t xTaskToDelete = */ NULL);
+        }
+
+        // Print the bytes from our user input to stdout (replace ending \n with \0)
+        read_buffer[num_read_bytes - 1] = '\0';
+        s_println(read_buffer);
+
+        // See if the the packet matches a command, if so, execute it
+        for(size_t i = 0; i < NUM_IP_COMMANDS; ++i)
+        {
+            if(((num_read_bytes - 1) == strlen(ip_commands[i].command)) && 
+                (0 == strncmp(read_buffer, ip_commands[i].command, num_read_bytes)))
+            {
+                (*(ip_commands[i].action))();
+            }
+        }
+
+        // 7SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
+        PRINT_STACK_USAGE();
+    }
+}
 
 // Handle WiFi events
 static void event_any_wifi(
@@ -159,7 +215,9 @@ static void event_got_ip(
 
 // If all went well, by the end you will have IP address,
 // and can connect to a socket to talk with other servers on a network
-bool connect_wifi()
+bool connect_wifi(
+    char *wifi_ssid,
+    char *wifi_password)
 {
     // Initialize the underlying TCP/IP stack
     ESP_ERROR_CHECK(esp_netif_init());
@@ -232,12 +290,12 @@ bool connect_wifi()
     wifi_config_t wifi_config = { 0 };
     (void) memcpy(
         /* void* dest = */ wifi_config.sta.ssid,
-        /* const void* src = */ WIFI_SSID,
-        /* std::size_t count = */ min(sizeof(wifi_config.sta.ssid), sizeof(WIFI_SSID)));
+        /* const void* src = */ wifi_ssid,
+        /* std::size_t count = */ min(sizeof(wifi_config.sta.ssid), strlen(wifi_ssid)));
     (void) memcpy(
         /* void* dest = */ wifi_config.sta.password,
-        /* const void* src = */ WIFI_PASSWORD,
-        /* std::size_t count = */ min(sizeof(wifi_config.sta.ssid), sizeof(WIFI_PASSWORD)));
+        /* const void* src = */ wifi_password,
+        /* std::size_t count = */ min(sizeof(wifi_config.sta.ssid), strlen(wifi_password)));
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = true;
@@ -277,7 +335,8 @@ bool connect_wifi()
     
     // Return result of overall operation
     bool status = (event_bits & WIFI_CONNECTED_BIT) > 0;
-    s_println((true == status) ? "Connected to AP" : "Failed to connect to AP");
+    s_print((true == status) ? "Connected to AP: " : "Failed to connect to AP: ");
+    s_println(wifi_ssid);
     return status;
 
 #if 0
@@ -299,22 +358,23 @@ bool connect_wifi()
 
 // Connect and read IPv4 data
 // If you want to connect to IPv6 or use another protocol, please update this function
-bool connect_tcp_server()
+bool connect_tcp_server(
+    uint32_t tcp_server_ipv4_addr,
+    uint32_t tcp_server_port)
 {
-    // Instantiate server information and a blank buffer to store reads in
+    // Instantiate server information
     struct sockaddr_in server_info = { 0 };
-    char read_buffer[1024] = { 0 };
 
     // Give the protocol family that will be used for this server
     server_info.sin_family = AF_INET;
     // Set server address to some hard-coded IP address
-    server_info.sin_addr.s_addr = TCP_SERVER_IP_ADDR;
+    server_info.sin_addr.s_addr = tcp_server_ipv4_addr;
     // Set the port by converting some hard-coded value to from host-byte-order to network byte order
     // https://linux.die.net/man/3/htons
-    server_info.sin_port = htons(/* uint32_t hostlong = */ TCP_SERVER_PORT);
+    server_info.sin_port = htons(/* uint32_t hostlong = */ tcp_server_port);
     // Get a file descriptor to use as an endpoint for communcation
     // https://www.man7.org/linux/man-pages/man2/socket.2.html
-    const int file_descriptor = socket(
+    ip_socket_file_descriptor = socket(
         // The protocol family which will be used for communication
         // ex: AF_INET = IPv4 Internet protocols
         //     AF_INET6 = IPv6 Internet protocols
@@ -329,7 +389,7 @@ bool connect_tcp_server()
         // Normally only a single protocol exists to support a particular socket type within a given protocol family,
         // in which case protocol can be specified as 0.
         /* int protocol = */ 0);
-    if (0 > file_descriptor)
+    if (0 > ip_socket_file_descriptor)
     {
         s_println("Failed creating TCP socket");
         return false;
@@ -340,40 +400,34 @@ bool connect_tcp_server()
     // https://linux.die.net/man/3/inet_ntoa
     // https://man7.org/linux/man-pages/man2/close.2.html
     if (0 != connect(
-        /* int sockfd = */ file_descriptor,
+        /* int sockfd = */ ip_socket_file_descriptor,
         /* const struct sockaddr *addr = */ (struct sockaddr *) &server_info,
         /* socklen_t addrlen = */ sizeof(server_info)))
     {
         s_print("Failed to connect to: ");
         s_println(inet_ntoa(/* struct in_addr in = */ server_info.sin_addr.s_addr));
-        close(/* int fd = */ file_descriptor);
+        close(/* int fd = */ ip_socket_file_descriptor);
         return false;
     }
 
-    s_println("Connected to TCP server");
+    s_println("Connected to TCP server, listening...");
 
-    // Get the number of bytes in the file descriptor,
-    // copy up to count bytes from the file descriptor to our read buffer
-    // https://man7.org/linux/man-pages/man2/read.2.html
-    const int num_read_bytes = read(
-        /* int fd = */ file_descriptor,
-        /* void buf[.count] = */ read_buffer,
-        /* size_t count = */ sizeof(read_buffer) - 1);
-
-    // Print the bytes from our user input to stdout
-    for(size_t i = 0; i < num_read_bytes; ++i)
-    {
-        // https://man7.org/linux/man-pages/man3/putchar.3p.html
-        putchar(/* int c = */ read_buffer[i]);
-    }
-
-    // Use this to react to user input
-    // TODO: make it something useful
-    const char example[] = "Hello world!";
-    if(strncmp(read_buffer, example, min(sizeof(read_buffer), sizeof(example))))
-    {
-        s_println("Hello world!");
-    }
+    xTaskCreate(
+        // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
+        /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_ip_packets,
+        // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
+        /* const char *const pcName = */ "read_ip",
+        // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        // Pointer that will be used as the parameter for the task being created.
+        /* void *const pvParameters = */ NULL,
+        // The priority at which the task should run.
+        // Systems that include MPU support can optionally create tasks in a privileged (system) mode by setting bit portPRIVILEGE_BIT of the priority parameter.
+        // For example, to create a privileged task at priority 2 the uxPriority parameter should be set to ( 2 | portPRIVILEGE_BIT ).
+        /* UBaseType_t uxPriority = */ 10,
+        // Used to pass back a handle by which the created task can be referenced.
+        /* TaskHandle_t *const pxCreatedTask = */ &read_ip_packet_task_handle);
+    configASSERT(read_ip_packet_task_handle);
 
     return true;
 }
