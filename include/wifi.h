@@ -11,6 +11,10 @@ bool connect_wifi(
 bool connect_tcp_server(
     uint32_t tcp_server_ipv4_addr,
     uint32_t tcp_server_port);
+bool send_tcp_packet(
+    void *packet,
+    size_t num_packet_bytes,
+    int flags = 0);
 
 #endif // WIFI_ENABLED
 

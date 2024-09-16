@@ -89,7 +89,7 @@ void task_read_ip_packets()
         num_read_bytes = read(
             /* int fd = */ ip_socket_file_descriptor,
             /* void buf[.count] = */ read_buffer,
-            /* size_t count = */ sizeof(read_buffer) - 1);
+            /* size_t count = */ sizeof(read_buffer) - sizeof('\n'));
         if(0 > num_read_bytes)
         {
             // Failed to read the file descriptor, stop this task and free its resources
@@ -101,13 +101,13 @@ void task_read_ip_packets()
         }
 
         // Print the bytes from our user input to stdout (replace ending \n with \0)
-        read_buffer[num_read_bytes - 1] = '\0';
+        read_buffer[num_read_bytes - sizeof('\n')] = '\0';
         s_println(read_buffer);
 
         // See if the the packet matches a command, if so, execute it
         for(size_t i = 0; i < NUM_IP_COMMANDS; ++i)
         {
-            if(((num_read_bytes - 1) == strlen(ip_commands[i].command)) && 
+            if(((num_read_bytes - sizeof('\0')) == strlen(ip_commands[i].command)) && 
                 (0 == strncmp(read_buffer, ip_commands[i].command, num_read_bytes)))
             {
                 (*(ip_commands[i].action))();
@@ -448,6 +448,21 @@ bool connect_tcp_server(
     configASSERT(read_ip_packet_task_handle);
 
     return true;
+}
+
+bool send_tcp_packet(
+    void *packet,
+    size_t num_packet_bytes,
+    int flags)
+{
+    // Send the packet and return the result
+    // See the link below for default settings, for example, this code blocks by default.
+    // https://www.man7.org/linux/man-pages/man2/send.2.html
+    return -1 != send(
+        /* int sockfd = */ ip_socket_file_descriptor,
+        /* const void buf[.len] = */ packet,
+        /* size_t len = */ num_packet_bytes,
+        /* int flags = */ flags);
 }
 
 #if 0

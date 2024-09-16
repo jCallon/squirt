@@ -4,6 +4,8 @@
 #include "context.h"
 // Include custom debug macros
 #include "flags.h"
+// TODO: comment
+#include "wifi.h"
 // Include FreeRTOS queue API
 #include "freertos/queue.h"
 
@@ -359,13 +361,6 @@ Menu::Menu(
     num_menu_lines = arg_num_menu_lines;
     index_menu_item_hover = 0;
     is_menu_item_selected = false;
-
-    // Initialize display buffer to start every line with 2 spaces
-    for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
-    {
-        display_buffer[line_num][0] = ' ';
-        display_buffer[line_num][1] = ' ';
-    }
 }
 
 void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
@@ -411,9 +406,6 @@ void Menu::update_display()
     // Generate display buffer //
     // ----------------------- //
 
-    // Set cursor depending on whether a menu item is selected
-    display_buffer[0][0] = (true == is_menu_item_selected) ? '>' : '-';
-
     // Fill each line in display_buffer with its matching menu line, for example:
     // +--------------------+
     // | > option A         |
@@ -422,23 +414,39 @@ void Menu::update_display()
     // |   option D         |
     // +--------------------+
     String *menu_line_str = nullptr;
+    size_t num_chars_written = 0;
     for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
     {
+        // NOTE: ++a returns the value before incrementing
+        //       a++ returns the value after incrementing
+        //       And it seems like my compiler is optimizing something away so I'm not putting the ++a in brackets
+
+        // Each line should start with 2 spaces, a cursor in the first space, if it is the first line
+        display_buffer[num_chars_written] = (0 == line_num) ? ((true == is_menu_item_selected) ? '>' : '-') : ' ';
+        ++num_chars_written;
+        display_buffer[num_chars_written] = ' ';
+        ++num_chars_written;
+
         // Get the menu line, as a string, at the top line + the line offset
         (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
 
-        // If the menu line could not be repesented as a string, treat it as a null terminated string with no characters
-        if(nullptr == menu_line_str)
+        // Copy the menu line to display_buffer
+        if(nullptr != menu_line_str)
         {
-            display_buffer[line_num][2] = '\0';
-            continue;
+            menu_line_str->toCharArray(
+                /* char *buf = */ &(display_buffer[num_chars_written]),
+                /* unsigned int bufsize = */ sizeof(display_buffer) - num_chars_written);
+            num_chars_written += menu_line_str->length();
         }
 
-        // Copy the menu line, as a string, to display_buffer, after 2 leading spaces
-        menu_line_str->toCharArray(
-            /* char *buf = */ &(display_buffer[line_num][2 * sizeof(' ')]),
-            /* unsigned int bufsize = */ NUM_DISPLAY_CHARS_PER_LINE - (2 * sizeof(' ')) + sizeof('\0'));
+        // End each line with a newline \n
+        display_buffer[num_chars_written] = '\n';
+        ++num_chars_written;
     }
+
+    // Set null terminating character
+    display_buffer[num_chars_written] = '\0';
+    ++num_chars_written;
 
     // -------------------------------------- //
     // Update display to match display buffer //
@@ -448,12 +456,23 @@ void Menu::update_display()
     display.clear();
 
     // Update the display at each line to match display_buffer
-    for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
+    // This display API requires newlines to instead be null terminating characters
+    // Use sliding window (one pointer on the left and one on the right to say where the string starts and ends)
+    for(size_t line_num = 0, left = 0, right = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
     {
+        // Find the next newline, set it to null terminator
+        for(right = left; '\n' != display_buffer[right]; ++right);
+        display_buffer[right] = '\0';
+
+        // Update display line
         display.setCursor(
-            /* uint8_t col = */ 0,
-            /* uint8_t row = */ line_num);
-        display.print(/* const char *c = */ &(display_buffer[line_num][0]));
+            /* int col = */ 0,
+            /* int row = */ line_num);
+        display.print(/* const char *c = */ &(display_buffer[left]));
+
+        // Get ready for next loop, undo modification
+        left = right + 1;
+        display_buffer[right] = '\n';
     }
 
     // ------------------------------------- //
@@ -461,7 +480,9 @@ void Menu::update_display()
     // ------------------------------------- //
 
 #if WIFI_ENABLED
-    // TODO: write implementation
+    (void) send_tcp_packet(
+        /* void *packet = */ display_buffer,
+        /* size_t num_packet_bytes = */ num_chars_written);
 #endif // WIFI_ENABLED
 
     // -------------------------------------- //
