@@ -21,8 +21,8 @@
 // Initialize display peripheral
 LiquidCrystal_I2C display(
     /* uint8_t lcd_Addr = */ DISPLAY_I2C_ADDR,
-    /* uint8_t lcd_cols = */ NUM_DISPLAY_COLUMNS,
-    /* uint8_t lcd_rows = */ NUM_DISPLAY_ROWS
+    /* uint8_t lcd_cols = */ NUM_DISPLAY_CHARS_PER_LINE,
+    /* uint8_t lcd_rows = */ NUM_DISPLAY_LINES
 );
 
 // Store the handle the the menu input queue
@@ -359,6 +359,13 @@ Menu::Menu(
     num_menu_lines = arg_num_menu_lines;
     index_menu_item_hover = 0;
     is_menu_item_selected = false;
+
+    // Initialize display buffer to start every line with 2 spaces
+    for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
+    {
+        display_buffer[line_num][0] = ' ';
+        display_buffer[line_num][1] = ' ';
+    }
 }
 
 void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
@@ -398,53 +405,70 @@ void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
 // TODO: Do it need to put a mutex lock around this? Altough seeing things glitch around would be pretty fun...
 void Menu::update_display()
 {
-    // Here is an example of a 20x4 display.
-    // In this example, X is a custom water-drip character, and # is a custom right-arrow character
-    // -------------------- //
-    // # Goal X: 50%        //
-    //   X freq: 1000 min   //
-    //   Last X: 08:00 AM   //
-    //   Next X: 12:00 PM   //
-    // -------------------- //
+    // NOTE: There is a compiler check in menu.h to assert the display buffer is at least 1 line and 2 characters
 
-    // TODO: Is there a way to batch together display updates and send them all out at once instead?
+    // ----------------------- //
+    // Generate display buffer //
+    // ----------------------- //
 
-    // Clear characters already on display
+    // Set cursor depending on whether a menu item is selected
+    display_buffer[0][0] = (true == is_menu_item_selected) ? '>' : '-';
+
+    // Fill each line in display_buffer with its matching menu line, for example:
+    // +--------------------+
+    // | > option A         |
+    // |   option B         |
+    // |   option C         |
+    // |   option D         |
+    // +--------------------+
+    String *menu_line_str = nullptr;
+    for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
+    {
+        // Get the menu line, as a string, at the top line + the line offset
+        (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
+
+        // If the menu line could not be repesented as a string, treat it as a null terminated string with no characters
+        if(nullptr == menu_line_str)
+        {
+            display_buffer[line_num][2] = '\0';
+            continue;
+        }
+
+        // Copy the menu line, as a string, to display_buffer, after 2 leading spaces
+        menu_line_str->toCharArray(
+            /* char *buf = */ &(display_buffer[line_num][2 * sizeof(' ')]),
+            /* unsigned int bufsize = */ NUM_DISPLAY_CHARS_PER_LINE - (2 * sizeof(' ')) + sizeof('\0'));
+    }
+
+    // -------------------------------------- //
+    // Update display to match display buffer //
+    // -------------------------------------- //
+
+    // Clear existing characters on display
     display.clear();
 
-    // Display cursor
-    display.setCursor(
-        /* uint8_t col = */ 0,
-        /* uint8_t row = */ 0
-    );
-    if(true == is_menu_item_selected)
+    // Update the display at each line to match display_buffer
+    for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
     {
-        display.write(/* uint8_t = */ CUSTOM_CHAR_FILLED_RIGHT_ARROW);
-    }
-    else
-    {
-        display.print(/* const char *c = */ ">");
-    }
-
-    // Display menu lines
-    if (0 == num_menu_lines)
-    {
-        return;
-    }
-    String *menu_line_str = nullptr;
-    for(size_t line_num = 0; line_num < NUM_DISPLAY_ROWS; ++line_num)
-    {
-        // Set the cursor
         display.setCursor(
-            /* uint8_t col = */ 2,
-            /* uint8_t row = */ line_num
-        );
-
-        // Get the menu line as a string, put it onto the screen
-        (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
-        if(nullptr != menu_line_str)
-        {
-            display.print(/* const char *c = */ menu_line_str->c_str());
-        }
+            /* uint8_t col = */ 0,
+            /* uint8_t row = */ line_num);
+        display.print(/* const char *c = */ &(display_buffer[line_num][0]));
     }
+
+    // ------------------------------------- //
+    // Send display buffer out over WiFi/TCP //
+    // ------------------------------------- //
+
+#if WIFI_ENABLED
+    // TODO: write implementation
+#endif // WIFI_ENABLED
+
+    // -------------------------------------- //
+    // Send display buffer out over Bluetooth //
+    // -------------------------------------- //
+
+#if BLUETOOTH_ENABLED
+    // TODO: write implementation
+#endif
 }
