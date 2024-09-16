@@ -12,13 +12,13 @@
 // - The button at pin PIN_BUTTON_CONFIRM_IN will be used by a user if they want to confirm an option in a menu
 // - The button at pin PIN_BUTTON_DOWN_IN will be used by a user if they want to go down in a menu
 // - The button at pin PIN_BUTTON_SLEEP_IN will be used by a user to go into low-power mode, diabling user IO
-#define PIN_BUTTON_UP_IN ((gpio_num_t) GPIO_NUM_21)
+#define PIN_BUTTON_UP_IN ((gpio_num_t) GPIO_NUM_23)
 //#define PIN_BUTTON_UP_OUT GND
-#define PIN_BUTTON_CONFIRM_IN ((gpio_num_t) GPIO_NUM_19)
+#define PIN_BUTTON_CONFIRM_IN ((gpio_num_t) GPIO_NUM_22)
 //#define PIN_BUTTON_CONFIRM_OUT GND
-#define PIN_BUTTON_DOWN_IN ((gpio_num_t) GPIO_NUM_18)
+#define PIN_BUTTON_DOWN_IN ((gpio_num_t) GPIO_NUM_21)
 //#define PIN_BUTTON_SLEEP_OUT GND
-#define PIN_BUTTON_SLEEP_IN ((gpio_num_t) GPIO_NUM_23)
+#define PIN_BUTTON_SLEEP_IN ((gpio_num_t) GPIO_NUM_32)
 //#define PIN_BUTTON_DOWN_OUT GND
 #define NUM_BUTTONS 4
 

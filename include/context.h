@@ -13,11 +13,10 @@
 // Define what pins are mapped to what peripherals
 //#define PIN_SERVO_NEG GND
 //#define PIN_SERVO_POS VIN
-#define PIN_SERVO_OUT ((gpio_num_t) GPIO_NUM_25)
-// This is where I would define a proper pin... If I had one! (supply-chain weirdness)
+#define PIN_SERVO_OUT ((gpio_num_t) GPIO_NUM_33)
 //#define PIN_SOIL_MOISTURE_SENSOR_NEG GND
 //#define PIN_SOIL_MOISTURE_SENSOR_POS VIN
-#define PIN_SOIL_MOISTURE_SENSOR_IN ((gpio_num_t) GPIO_NUM_0)
+#define PIN_SOIL_MOISTURE_SENSOR_IN ((gpio_num_t) GPIO_NUM_35)
 
 enum CONTEXT_MEMBER_t
 {

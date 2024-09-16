@@ -17,8 +17,8 @@
 // See button.h for more
 //#define PIN_I2C_DISPLAY_GND GND
 //#define PIN_I2C_DISPLAY_VCC VIN
-#define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_27)
-#define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_26)
+#define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_19)
+#define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_18)
 
 // Define display constants
 // Define I2C address for display, see your manufacturer notes to figure out yours
