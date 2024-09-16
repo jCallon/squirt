@@ -77,9 +77,6 @@ ip_command_t ip_commands[NUM_IP_COMMANDS] = {
 
 void task_read_ip_packets()
 {
-    // TODO: Why did the buttons stop working?
-    //       Even when I don't compile WiFi, they've stopped working. Did something fry? Did some software change? When did it last work?
-
     // Create a 0-initiaized buffer IP packets will be read into
     char read_buffer[16] = { 0 };
     int num_read_bytes = 0;

@@ -15,6 +15,17 @@
 // Include custom debug macros
 #include "flags.h"
 
+// TODO: Sometimes when the ESP32 is plugged in for a long time,
+//       it stops responding to button inputs, even if it's restarted.
+//       Why? Is something too hot? Is there a timer or something else (didn't change the firmware)
+//       that needs to be cold-reset?
+//       The buttons were working, then when I rebooted with the same firmware (and it connected to TCP this time), all buttons stopped working again.
+//       What's going wrong?
+//       - Powering the buttons (check via gpio_pin_get_value,
+//             maybe with all the peripherals and the board using wifi it takes too much power for button presses to be recognized as HIGH)
+//       - Trigerring the interrupts (check via looking at the gpio settings, setting a global at the first line of the isr)
+//       - The behavior within the ISRs (check via setting a global at a later line or with a line number)
+
 // ======================= //
 // Instantiate useful data //
 // ======================= //
@@ -137,7 +148,12 @@ static void task_toggle_sleep_mode()
             display->display();
             display->backlight();
 
-            // NOTE: if I ever enable wireless protocols, re-enable them here
+#if WIFI_ENABLED
+            // TODO: pause or stop WiFi
+#endif
+#if BLUETOOTH_ENABLED
+            // pause or stop BlueTooth
+#endif
         }
         // Otherwise, sleep the device
         else
@@ -155,7 +171,12 @@ static void task_toggle_sleep_mode()
             // Pause task to read menu inputs
             vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ read_menu_input_queue_task_handle);
 
-            // NOTE: if I ever enable wireless protocols, disable them here
+#if WIFI_ENABLED
+            // TODO: resume or restart WiFi
+#endif
+#if BLUETOOTH_ENABLED
+            // resume or restart BlueTooth
+#endif
         }
 
         is_asleep = !is_asleep;
