@@ -12,27 +12,18 @@
 
 #if WIFI_ENABLED
 
-// TODO: comment
+// Include FreeRTOS common header
 #include "freertos/FreeRTOS.h"
-// TODO: comment
+// Include FreeRTOS task API
 #include "freertos/task.h"
-// TODO: comment
+// Include FreeRTOS event group API
 #include "freertos/event_groups.h"
-// TODO: comment
-#include "esp_system.h"
-// TODO: comment
-#include "esp_wifi.h"
-// TODO: comment
-#include "esp_event.h"
-
-// TODO: comment
+// Import light-weight IP socket API
 #include "lwip/sockets.h"
-// TODO: comment
-#include "lwip/sys.h"
-// TODO: comment
-#include "lwip/netdb.h"
-// TODO: comment
-#include "lwip/dns.h"
+// Include ESP WiFi API
+#include "esp_wifi.h"
+// Include ESP event API
+#include "esp_event.h"
 
 // Include custom Menu class implementation
 #include "menu.h"
@@ -49,17 +40,15 @@
 #define NUM_MAX_WIFI_CONNECT_RETRIES 5
 
 // Define the number of currently supported TCP commands
-// TODO: Should this variable be renamed?
-#define NUM_IP_COMMANDS 3
+#define NUM_TCP_COMMANDS 3
 
 // Define, when receiving a TCP packet, what special strings should cause what actions
-// TODO: Should this struct be renamed?
-typedef struct ip_command_s {
+typedef struct tcp_command_s {
     // The string, that if the TCP packet matches, should trigger an action
     const char* command;
     // The action to be triggered if the TCP packet matched command
     void (*action)();
-} ip_command_t;
+} tcp_command_t;
 
 // ======================= //
 // Instantiate useful data //
@@ -72,16 +61,14 @@ EventGroupHandle_t event_group_handle_wifi = nullptr;
 // Keep track of the file handle being used as the IP socket connection
 // TODO: Put a mutex around this file handle
 int ip_socket_file_descriptor = 0;
-// Keep track of the handle of the task that reads incoming TCP packets (task_read_ip_packets(...))
-// TODO: Should this variable be renamed?
+// Keep track of the handle of the task that reads IP packets (task_read_ip_packets(...))
 TaskHandle_t read_ip_packet_task_handle = nullptr;
 // Keep track of the esp_netif object attaching netif to wifi and registering wifi handlers to the default event loop
 void *esp_netif = nullptr;
 
 // Keep track of the special strings that if a TCP packet matches,
 // should excute an action, and what action they should ewxecute
-// TODO: Should this array be renamed?
-ip_command_t ip_commands[NUM_IP_COMMANDS] = {
+tcp_command_t tcp_commands[NUM_TCP_COMMANDS] = {
     {
         .command = "up",
         .action = []() { add_to_menu_input_queue(
@@ -114,11 +101,10 @@ ip_command_t ip_commands[NUM_IP_COMMANDS] = {
 // Define tasks //
 // ============ //
 
-// A task whose job it is to read all incoming TCP packets.
+// A task whose job it is to read all incoming TCP packets over the connected IP socket.
 // Based on the contents of the TCP packet, it may execute certain actions.
 // Once the socket the TCP connection is set up on, ip_socket_file_descriptor,
 // is no longer readable, it automatically kills itself and resets the handle.
-// TODO: Should this function be renamed?
 void task_read_ip_packets()
 {
     // Create a 0-initialized buffer IP packets will be read into
@@ -149,12 +135,12 @@ void task_read_ip_packets()
         s_println(read_buffer);
 
         // See if the the packet matches a command, if so, execute it
-        for(size_t i = 0; i < NUM_IP_COMMANDS; ++i)
+        for(size_t i = 0; i < NUM_TCP_COMMANDS; ++i)
         {
-            if(((num_read_bytes - sizeof('\0')) == strlen(ip_commands[i].command)) && 
-                (0 == strncmp(read_buffer, ip_commands[i].command, num_read_bytes)))
+            if(((num_read_bytes - sizeof('\0')) == strlen(tcp_commands[i].command)) && 
+                (0 == strncmp(read_buffer, tcp_commands[i].command, num_read_bytes)))
             {
-                (*(ip_commands[i].action))();
+                (*(tcp_commands[i].action))();
             }
         }
 
@@ -333,7 +319,6 @@ bool wifi_free()
 
     // Dealloc WiFi stack and task
     // TODO: Look into WiFi low-power mode, for example: esp_wifi_set_ps(/* wifi_ps_type_t type = */ ...)
-    // TODO: Make other functions not crash device or something on failure
     ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_deinit());
     return_status &= (ESP_OK == status);
 
@@ -453,8 +438,6 @@ static void event_got_ip(
             break;
     }
 }
-
-
 
 // Allocate event group in main event loop (which will be connected to WiFi)
 static inline bool wifi_event_group_init(
@@ -642,8 +625,7 @@ bool tcp_start(
         /* int protocol = */ 0);
     if (0 > ip_socket_file_descriptor)
     {
-        // TODO: is this the IP socket or TCP socket?
-        s_println("Failed creating TCP socket");
+        s_println("Failed creating IP socket");
         return false;
     }
 
