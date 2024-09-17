@@ -14,6 +14,10 @@
 #include "menu.h"
 // Include custom debug macros
 #include "flags.h"
+// Include custom wifi API
+#include "wifi.h"
+// Include WiFi credentials
+#include "credentials.h"
 
 // ======================= //
 // Instantiate useful data //
@@ -93,7 +97,7 @@ void init_buttons()
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "toggle_sleep",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 256,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ NULL,
         // The priority at which the task should run.
@@ -138,7 +142,9 @@ static void task_toggle_sleep_mode()
             display->backlight();
 
 #if WIFI_ENABLED
-            // TODO: pause or stop WiFi
+            // Free all TCP and WiFi connections
+            tcp_free();
+            wifi_free();
 #endif
 #if BLUETOOTH_ENABLED
             // pause or stop BlueTooth
@@ -161,7 +167,15 @@ static void task_toggle_sleep_mode()
             vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ read_menu_input_queue_task_handle);
 
 #if WIFI_ENABLED
-            // TODO: resume or restart WiFi
+            // Reinstantiate all TCP and WiFi connections
+            if(true == wifi_start(
+                /* char *wifi_ssid = */ WIFI_SSID,
+                /* char *wifi_password = */ WIFI_PASSWORD))
+            {
+                tcp_start(
+                    /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
+                    /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
+            }
 #endif
 #if BLUETOOTH_ENABLED
             // resume or restart BlueTooth
@@ -170,7 +184,7 @@ static void task_toggle_sleep_mode()
 
         is_asleep = !is_asleep;
 
-        // 24AUG2024: usStackDepth = 1024 + 256, uxTaskGetHighWaterMark = 188
+        // 07SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
         PRINT_STACK_USAGE();
     }
 }

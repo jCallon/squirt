@@ -480,7 +480,7 @@ void Menu::update_display()
     // ------------------------------------- //
 
 #if WIFI_ENABLED
-    (void) send_tcp_packet(
+    (void) tcp_send(
         /* void *packet = */ display_buffer,
         /* size_t num_packet_bytes = */ num_chars_written);
 #endif // WIFI_ENABLED

@@ -79,11 +79,11 @@ void setup()
     init_buttons();
 
 #if WIFI_ENABLED
-    if(true == connect_wifi(
+    if(true == wifi_start(
         /* char *wifi_ssid = */ WIFI_SSID,
         /* char *wifi_password = */ WIFI_PASSWORD))
     {
-        connect_tcp_server(
+        tcp_start(
             /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
             /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
     }

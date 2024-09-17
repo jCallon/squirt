@@ -5,13 +5,16 @@
 
 #if WIFI_ENABLED
 
-bool connect_wifi(
+bool wifi_start(
     char *wifi_ssid,
     char *wifi_password);
-bool connect_tcp_server(
+bool wifi_free();
+
+bool tcp_start(
     uint32_t tcp_server_ipv4_addr,
     uint32_t tcp_server_port);
-bool send_tcp_packet(
+bool tcp_free();
+bool tcp_send(
     void *packet,
     size_t num_packet_bytes,
     int flags = 0);
