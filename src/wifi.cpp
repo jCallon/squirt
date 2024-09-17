@@ -144,7 +144,7 @@ void task_read_ip_packets()
             }
         }
 
-        // 7SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
+        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 420
         PRINT_STACK_USAGE();
     }
 }
@@ -638,7 +638,7 @@ bool tcp_start(
         /* const struct sockaddr *addr = */ (struct sockaddr *) &server_info,
         /* socklen_t addrlen = */ sizeof(server_info)))
     {
-        s_print("Failed to connect to: ");
+        s_print("Failed to connect to TCP server at: ");
         s_print(inet_ntoa(/* struct in_addr in = */ tcp_server_ipv4_addr));
         s_print(":");
         s_println(tcp_server_port, DEC);
@@ -656,7 +656,7 @@ bool tcp_start(
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "read_ip",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 512,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ NULL,
         // The priority at which the task should run.

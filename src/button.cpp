@@ -16,8 +16,6 @@
 #include "flags.h"
 // Include custom wifi API
 #include "wifi.h"
-// Include WiFi credentials
-#include "credentials.h"
 
 // ======================= //
 // Instantiate useful data //
@@ -27,23 +25,23 @@
 Button buttons[NUM_BUTTONS] = {
     { 
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_UP_IN
     },
     { 
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_CONFIRM_IN
     },
     { 
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_DOWN_IN
     },
     // NOTE: PIN_BUTTON_SLEEP_IN MUST be defined last for current sleep logic to work
     {
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_SLEEP_IN
     }
 };
@@ -97,7 +95,7 @@ void init_buttons()
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "toggle_sleep",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 512,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ NULL,
         // The priority at which the task should run.
@@ -142,17 +140,34 @@ static void task_toggle_sleep_mode()
             display->backlight();
 
 #if WIFI_ENABLED
-            // Free all TCP and WiFi connections
-            tcp_free();
-            wifi_free();
+            // Reinstantiate all TCP and WiFi connections
+            if(true == wifi_start(
+                /* char *wifi_ssid = */ WIFI_SSID,
+                /* char *wifi_password = */ WIFI_PASSWORD))
+            {
+                tcp_start(
+                    /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
+                    /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
+            }
 #endif
+
 #if BLUETOOTH_ENABLED
-            // pause or stop BlueTooth
+            // Resume or restart BlueTooth
 #endif
         }
         // Otherwise, sleep the device
         else
         {
+#if WIFI_ENABLED
+            // Free all TCP and WiFi connections
+            (void) tcp_free();
+            (void) wifi_free();
+#endif
+
+#if BLUETOOTH_ENABLED
+            // Pause or stop BlueTooth
+#endif
+
             // Turn off screen
             display->noDisplay();
             display->noBacklight();
@@ -165,26 +180,11 @@ static void task_toggle_sleep_mode()
 
             // Pause task to read menu inputs
             vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ read_menu_input_queue_task_handle);
-
-#if WIFI_ENABLED
-            // Reinstantiate all TCP and WiFi connections
-            if(true == wifi_start(
-                /* char *wifi_ssid = */ WIFI_SSID,
-                /* char *wifi_password = */ WIFI_PASSWORD))
-            {
-                tcp_start(
-                    /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
-                    /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
-            }
-#endif
-#if BLUETOOTH_ENABLED
-            // resume or restart BlueTooth
-#endif
         }
 
         is_asleep = !is_asleep;
 
-        // 07SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
+        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 284
         PRINT_STACK_USAGE();
     }
 }
