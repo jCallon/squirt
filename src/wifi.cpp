@@ -286,24 +286,20 @@ static inline bool wifi_init()
     esp_err_t status = ESP_OK;
 
     // Initialize the underlying TCP/IP stack
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_netif_init());
-    if (ESP_OK != status) return false;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_netif_init());
 
     // Initialize the default ESP event loop
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_event_loop_create_default());
-    if (ESP_OK != status) return false;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_event_loop_create_default());
 
     // Create default WiFi station (something that connects to a router,
     // instead of serving as a router itself) in the WiFi driver
     esp_netif = esp_netif_create_default_wifi_sta();
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = (nullptr != esp_netif) ? ESP_OK : ESP_FAIL);
-    if (ESP_OK != status) return false;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, (nullptr != esp_netif) ? ESP_OK : ESP_FAIL);
 
     // Initialize and allocate WiFi structures and start its task with default settings,
     // We can worry about getting the correct credentials and authentication method later
     const wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_init(/* const wifi_init_config_t *config = */ &wifi_init_config));
-    if (ESP_OK != status) return status;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_wifi_init(/* const wifi_init_config_t *config = */ &wifi_init_config));
 
     return true;
 }
@@ -317,24 +313,20 @@ bool wifi_free()
     bool return_status = true;
 
     // Stop WiFi
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_stop());
-    return_status &= (ESP_OK == status);
+    ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_wifi_stop());
 
     // Dealloc WiFi stack and task
     // TODO: Look into WiFi low-power mode, for example: esp_wifi_set_ps(/* wifi_ps_type_t type = */ ...)
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_deinit());
-    return_status &= (ESP_OK == status);
+    ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_wifi_deinit());
 
     // Dealloc WiFi station
     esp_netif_destroy_default_wifi(/* void *esp_netif = */ esp_netif);
 
     // Dealloc default event loop
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_event_loop_delete_default());
-    return_status &= (ESP_OK == status);
+    ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_event_loop_delete_default());
 
     // Dealloc underlying TCP/IP stack
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_netif_deinit());
-    return_status &= (ESP_OK == status);
+    ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_netif_deinit());
 
     return return_status;
 }
@@ -456,11 +448,10 @@ static inline bool wifi_event_group_init(
     // have happened, an inifinte loop checks it, and calls their corresponding event handler
     // (callback function), if they have one
     event_group_handle_wifi = xEventGroupCreate();
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = (nullptr != event_group_handle_wifi) ? ESP_OK : ESP_FAIL);
-    if (ESP_OK != status) return false;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, (nullptr != event_group_handle_wifi) ? ESP_OK : ESP_FAIL);
 
     // Register a new instance of an event handler to the event loop to handle WiFi
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_event_handler_instance_register(
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_event_handler_instance_register(
         // the base ID of the event to register the handler for
         /* esp_event_base_t event_base = */ WIFI_EVENT,
         // the ID of the event to register the handler for
@@ -476,10 +467,9 @@ static inline bool wifi_event_group_init(
         // distinct instance objects. The data can be the same for all registrations. If no unregistration
         // is needed, but the handler should be deleted when the event loop is deleted, instance can be NULL.
         /* esp_event_handler_instance_t *instance = */ &event_handler_instance_wifi));
-    if (ESP_OK != status) return false;
 
     // Register a new instance of an event handler to the event loop to handle getting IP (internet protocol) packets
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_event_handler_instance_register(
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_event_handler_instance_register(
         // the base ID of the event to register the handler for
         /* esp_event_base_t event_base = */ IP_EVENT,
         // the ID of the event to register the handler for
@@ -495,7 +485,6 @@ static inline bool wifi_event_group_init(
         // distinct instance objects. The data can be the same for all registrations. If no unregistration
         // is needed, but the handler should be deleted when the event loop is deleted, instance can be NULL.
         /* esp_event_handler_instance_t *instance = */ &event_handler_instance_ip));
-    if (ESP_OK != status) return false;
 
     return true;
 }
@@ -512,18 +501,16 @@ static bool wifi_event_group_free(
 
     // Don't need IP and WiFi event handlers anymore, can free them
     // Free IP event handler
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_event_handler_instance_unregister(
+    ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_event_handler_instance_unregister(
         /* esp_event_base_t event_base = */ IP_EVENT,
         /* int32_t event_id = */ IP_EVENT_STA_GOT_IP,
         /* esp_event_handler_instance_t instance = */ event_handler_instance_ip));
-    return_status &= (ESP_OK == status);
 
     // Free WiFi event handler
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_event_handler_instance_unregister(
+    ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_event_handler_instance_unregister(
         /* esp_event_base_t event_base = */ WIFI_EVENT,
         /* int32_t event_id = */ ESP_EVENT_ANY_ID,
         /* esp_event_handler_instance_t instance = */ event_handler_instance_wifi));
-    return_status &= (ESP_OK == status);
 
     // Free WiFi event group
     vEventGroupDelete(/* EventGroupHandle_t xEventGroup = */ event_group_handle_wifi);
@@ -542,8 +529,7 @@ static inline bool wifi_connect(
 
     // Set this ESP32 to a station, something that connects to a router,
     // instead of an AP (access point), something like a router
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_set_mode(/* wifi_mode_t mode = */ WIFI_MODE_STA));
-    if (ESP_OK != status) return false;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_wifi_set_mode(/* wifi_mode_t mode = */ WIFI_MODE_STA));
 
     // Set configuration of this station and AP to connect to
     // NOTE: we can save this in nvs_flash (non-volatile storage, to remember between reboots) if we want
@@ -566,15 +552,13 @@ static inline bool wifi_connect(
     //    .sae_h2e_identifier = EXAMPLE_H2E_IDENTIFIER,
 
     // Configure WiFi for this device as station
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_set_config(
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_wifi_set_config(
         /* wifi_interface_t interface = */ WIFI_IF_STA,
         /* wifi_config_t *conf = */ &wifi_config));
-    if (ESP_OK != status) return false;
 
     // Start Wifi with current configuration, creating control block for mode (STA, AP, STA & AP),
     // kicking off event loop for wifi controller
-    ESP_ERROR_CHECK_WITHOUT_ABORT(status = esp_wifi_start());
-    if (ESP_OK != status) return false;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, esp_wifi_start());
 
     s_println("WiFi event loop started, waiting to connect");
 
