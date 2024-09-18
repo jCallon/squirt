@@ -2,9 +2,7 @@
 #include "menu.h"
 // Include custom Context class implementation
 #include "context.h"
-// Include custom debug macros
-#include "flags.h"
-// TODO: comment
+// Include custom wifi API
 #include "wifi.h"
 // Include FreeRTOS queue API
 #include "freertos/queue.h"

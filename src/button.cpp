@@ -12,8 +12,6 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom debug macros
-#include "flags.h"
 // Include custom wifi API
 #include "wifi.h"
 

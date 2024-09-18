@@ -117,7 +117,7 @@ class Menu
         // Whether a menu item is currently selected, so menu inputs should be forwarded to the MenuLine's handlers instead of navigating Menu
         bool is_menu_item_selected;
         // Store current screen buffer (it will be transmitted over WiFi or Bluetooth)
-        char display_buffer[sizeof('\0') + (NUM_DISPLAY_LINES * (NUM_DISPLAY_CHARS_PER_LINE + sizeof('\n')))] = { 0 };
+        char display_buffer[sizeof('\0') + (NUM_DISPLAY_LINES * (NUM_DISPLAY_CHARS_PER_LINE + sizeof('\n')))];
 };
 
 #endif // __MENU_H__

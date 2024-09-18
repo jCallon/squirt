@@ -18,7 +18,7 @@
 #include "freertos/task.h"
 // Include FreeRTOS event group API
 #include "freertos/event_groups.h"
-// Import light-weight IP socket API
+// Include light-weight IP socket API
 #include "lwip/sockets.h"
 // Include ESP WiFi API
 #include "esp_wifi.h"
@@ -45,7 +45,7 @@
 // Define, when receiving a TCP packet, what special strings should cause what actions
 typedef struct tcp_command_s {
     // The string, that if the TCP packet matches, should trigger an action
-    const char* command;
+    const char *command;
     // The action to be triggered if the TCP packet matched command
     void (*action)();
 } tcp_command_t;
@@ -63,11 +63,11 @@ EventGroupHandle_t event_group_handle_wifi = nullptr;
 int ip_socket_file_descriptor = 0;
 // Keep track of the handle of the task that reads IP packets (task_read_ip_packets(...))
 TaskHandle_t read_ip_packet_task_handle = nullptr;
-// Keep track of the esp_netif object attaching netif to wifi and registering wifi handlers to the default event loop
+// Keep track of the esp_netif object attaching netif to WiFi and registering WiFi handlers to the default event loop
 void *esp_netif = nullptr;
 
 // Keep track of the special strings that if a TCP packet matches,
-// should excute an action, and what action they should ewxecute
+// should execute an action, and what action they should execute
 tcp_command_t tcp_commands[NUM_TCP_COMMANDS] = {
     {
         .command = "up",
@@ -114,12 +114,12 @@ void task_read_ip_packets()
     while(1)
     {
         // Get the number of bytes in the file descriptor,
-        // copy up to count bytes from the file descriptor to our read buffer
+        // copy from the file descriptor to our read buffer while not overflowing it
         // https://man7.org/linux/man-pages/man2/read.2.html
         num_read_bytes = read(
             /* int fd = */ ip_socket_file_descriptor,
             /* void buf[.count] = */ read_buffer,
-            /* size_t count = */ sizeof(read_buffer) - sizeof('\n'));
+            /* size_t count = */ sizeof(read_buffer));
         if(0 > num_read_bytes)
         {
             // Failed to read the file descriptor, stop this task and free its resources
@@ -132,15 +132,18 @@ void task_read_ip_packets()
 
         // Print the bytes from our user input to stdout (replace ending \n with \0)
         read_buffer[num_read_bytes - sizeof('\n')] = '\0';
+        s_print("Got TCP packet: ");
         s_println(read_buffer);
 
         // See if the the packet matches a command, if so, execute it
+        // All commands should be unique, no need to check against the others once a match is found
         for(size_t i = 0; i < NUM_TCP_COMMANDS; ++i)
         {
             if(((num_read_bytes - sizeof('\0')) == strlen(tcp_commands[i].command)) && 
                 (0 == strncmp(read_buffer, tcp_commands[i].command, num_read_bytes)))
             {
                 (*(tcp_commands[i].action))();
+                break;
             }
         }
 
@@ -181,7 +184,7 @@ bool wifi_start(
     char *wifi_ssid,
     char *wifi_password)
 {
-    // Allocate TCP/IP/WiFi resrouces
+    // Allocate TCP/IP/WiFi resources
     if(false == wifi_init())
     {
         s_println("Failed to initialize TCP/IP/WiFi resources");

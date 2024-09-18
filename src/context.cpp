@@ -2,7 +2,7 @@
 #include "context.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom debug macros
+// Include custom debug macros and compile flags
 #include "flags.h"
 
 // ======================================= //

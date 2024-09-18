@@ -1,7 +1,7 @@
 #ifndef __WIFI_H__
 #define __WIFI_H__
 
-// Include custom debug macros
+// Include custom debug macros and compile flags
 #include "flags.h"
 
 #if WIFI_ENABLED
