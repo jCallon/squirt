@@ -12,8 +12,8 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom wifi API
-#include "wifi.h"
+// Include custom TCP/IP API
+#include "tcp_ip.h"
 
 // ======================= //
 // Instantiate useful data //

@@ -15,13 +15,8 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom debug macros and compile flags
-#include "flags.h"
-
-#if WIFI_ENABLED
-// Include custom wifi API
-#include "wifi.h"
-#endif // WIFI_ENABLED
+// Include custom TCP/IP API
+#include "tcp_ip.h"
 
 // =========================== //
 // Initialize and start device //
