@@ -1,13 +1,10 @@
 #ifndef __TCP_IP_H__
 #define __TCP_IP_H__
 
-// Include custom debug macros and compile flags
-#include "flags.h"
-
-#if WIFI_ENABLED
-
 // Include custom WiFi API
 #include "wifi.h"
+
+#if WIFI_ENABLED
 
 // To create a TCP connection with a Windows computer connected to the same AP, try these steps:
 // 1. Install https://nmap.org/download#windows

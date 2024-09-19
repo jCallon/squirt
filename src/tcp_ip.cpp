@@ -62,19 +62,17 @@ const tcp_command_t tcp_commands[NUM_TCP_COMMANDS] = {
 };
 
 // Keep track of the file handle being used as the IP socket connection
-// R | W | function
-// --+---+------------------
-//   |   |               
-//   |   |             
-// TODO: Put a mutex around this file handle
 int ip_socket_file_descriptor = 0;
+
 // Keep track of the handle of the task that reads IP packets (task_read_ip_packets(...))
-// R | W | function
-// --+---+------------------
-//   |   |               
-//   |   |             
-// TODO: Does this need a mutex?
 TaskHandle_t read_ip_packet_task_handle = nullptr;
+
+// NOTE: For now this code is good enough.
+//       Only *sleep*(...), *display*(...), and main(...) call this API.
+//       Will need to update this code to be thread-safe if that changes.
+//       Ex: keep a vector of open connections instead of only allowing one,
+//           represent connections as classes, each with their own locks, data, and methods, etc.,
+//           in each connection, only allow one tcp_send() at a time, have a read task, free if connection closes
 
 // ============ //
 // Define tasks //
@@ -192,9 +190,12 @@ bool tcp_start(
         return false;
     }
 
-    s_println("Connected to TCP server, listening...");
+    s_print("Connected to TCP server at: ");
+    s_print(inet_ntoa(/* struct in_addr in = */ tcp_server_ipv4_addr));
+    s_print(":");
+    s_println(tcp_server_port, DEC);
 
-    // Create task whose job it is to readd all incoming TCP packets
+    // Create task whose job it is to read all incoming TCP packets
     (void) xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
         /* TaskFunction_t pxTaskCode = */ (TaskFunction_t) task_read_ip_packets,

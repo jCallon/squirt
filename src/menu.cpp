@@ -213,7 +213,7 @@ void add_to_menu_input_queue(
     // Write menu input GPIO pin number to queue holding all button presses
     // Remember, non-ISR queue access is not safe from within interrupts!
     // Don't care about the return value, I am ok with losing some button inputs
-    if(from_isr)
+    if(true == from_isr)
     {
         (void) xQueueSendFromISR(
             // The handle to the queue on which the item is to be posted.
