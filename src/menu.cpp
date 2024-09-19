@@ -2,8 +2,8 @@
 #include "menu.h"
 // Include custom Context class implementation
 #include "context.h"
-// Include custom debug macros
-#include "flags.h"
+// Include custom TCP/IP API
+#include "tcp_ip.h"
 // Include FreeRTOS queue API
 #include "freertos/queue.h"
 
@@ -21,8 +21,8 @@
 // Initialize display peripheral
 LiquidCrystal_I2C display(
     /* uint8_t lcd_Addr = */ DISPLAY_I2C_ADDR,
-    /* uint8_t lcd_cols = */ NUM_DISPLAY_COLUMNS,
-    /* uint8_t lcd_rows = */ NUM_DISPLAY_ROWS
+    /* uint8_t lcd_cols = */ NUM_DISPLAY_CHARS_PER_LINE,
+    /* uint8_t lcd_rows = */ NUM_DISPLAY_LINES
 );
 
 // Store the handle the the menu input queue
@@ -206,22 +206,41 @@ void init_menu()
 
 // Use non-member function, so many sources can write to the same input queue
 // Bound functions, such as member functions, can only be called, not used as pointers
-void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input)
+void add_to_menu_input_queue(
+    MENU_INPUT_t menu_input,
+    bool from_isr)
 {
     // Write menu input GPIO pin number to queue holding all button presses
     // Remember, non-ISR queue access is not safe from within interrupts!
     // Don't care about the return value, I am ok with losing some button inputs
-    (void) xQueueSendFromISR(
+    if(true == from_isr)
+    {
+        (void) xQueueSendFromISR(
+            // The handle to the queue on which the item is to be posted.
+            /* QueueHandle_t xQueue = */ menu_input_queue_handle,
+            // A pointer to the item that is to be placed on the queue.
+            // The size of the items the queue will hold was defined when the queue was created,
+            // so this many bytes will be copied from pvItemToQueue into the queue storage area.
+            /* const void *const pvItemToQueue = */ &menu_input,
+            // xQueueGenericSendFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE if sending to the queue caused a task to unblock,
+            // and the unblocked task has a priority higher than the currently running task.
+            // If xQueueGenericSendFromISR() sets this value to pdTRUE then a context switch should be requested before the interrupt is exited.
+            /* BaseType_t *const pxHigherPriorityTaskWoken = */ NULL
+        );
+        return;
+    }
+    (void) xQueueSend(
         // The handle to the queue on which the item is to be posted.
         /* QueueHandle_t xQueue = */ menu_input_queue_handle,
         // A pointer to the item that is to be placed on the queue.
         // The size of the items the queue will hold was defined when the queue was created,
         // so this many bytes will be copied from pvItemToQueue into the queue storage area.
         /* const void *const pvItemToQueue = */ &menu_input,
-        // xQueueGenericSendFromISR() will set *pxHigherPriorityTaskWoken to pdTRUE if sending to the queue caused a task to unblock,
-        // and the unblocked task has a priority higher than the currently running task.
-        // If xQueueGenericSendFromISR() sets this value to pdTRUE then a context switch should be requested before the interrupt is exited.
-        /* BaseType_t *const pxHigherPriorityTaskWoken = */ NULL
+        // The maximum amount of time the task should block waiting for space to become 
+        // available on the queue, should it already be full. The call will return immediately
+        // if this is set to 0 and the queue is full. The time is defined in tick periods so 
+        // the constant portTICK_PERIOD_MS should be used to convert to real time if this is required.
+        /* TickType_t xTicksToWait = */ pdMS_TO_TICKS(10)
     );
 }
 
@@ -250,7 +269,7 @@ void task_read_menu_input_queue()
             menu.react_to_menu_input(/* MENU_INPUT_t menu_input = */ menu_input);
         }
 
-        // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 308
+        // 19SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 520
         PRINT_STACK_USAGE();
     }
 }
@@ -379,53 +398,96 @@ void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
 // TODO: Do it need to put a mutex lock around this? Altough seeing things glitch around would be pretty fun...
 void Menu::update_display()
 {
-    // Here is an example of a 20x4 display.
-    // In this example, X is a custom water-drip character, and # is a custom right-arrow character
-    // -------------------- //
-    // # Goal X: 50%        //
-    //   X freq: 1000 min   //
-    //   Last X: 08:00 AM   //
-    //   Next X: 12:00 PM   //
-    // -------------------- //
+    // NOTE: There is a compiler check in menu.h to assert the display buffer is at least 1 line and 2 characters
 
-    // TODO: Is there a way to batch together display updates and send them all out at once instead?
+    // ----------------------- //
+    // Generate display buffer //
+    // ----------------------- //
 
-    // Clear characters already on display
-    display.clear();
-
-    // Display cursor
-    display.setCursor(
-        /* uint8_t col = */ 0,
-        /* uint8_t row = */ 0
-    );
-    if(true == is_menu_item_selected)
-    {
-        display.write(/* uint8_t = */ CUSTOM_CHAR_FILLED_RIGHT_ARROW);
-    }
-    else
-    {
-        display.print(/* const char *c = */ ">");
-    }
-
-    // Display menu lines
-    if (0 == num_menu_lines)
-    {
-        return;
-    }
+    // Fill each line in display_buffer with its matching menu line, for example:
+    // +--------------------+
+    // | > option A         |
+    // |   option B         |
+    // |   option C         |
+    // |   option D         |
+    // +--------------------+
     String *menu_line_str = nullptr;
-    for(size_t line_num = 0; line_num < NUM_DISPLAY_ROWS; ++line_num)
+    size_t num_chars_written = 0;
+    for(size_t line_num = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
     {
-        // Set the cursor
-        display.setCursor(
-            /* uint8_t col = */ 2,
-            /* uint8_t row = */ line_num
-        );
+        // NOTE: ++a returns the value before incrementing
+        //       a++ returns the value after incrementing
+        //       And it seems like my compiler is optimizing something away so I'm not putting the ++a in brackets
 
-        // Get the menu line as a string, put it onto the screen
+        // Each line should start with 2 spaces, a cursor in the first space, if it is the first line
+        display_buffer[num_chars_written] = (0 == line_num) ? ((true == is_menu_item_selected) ? '>' : '-') : ' ';
+        ++num_chars_written;
+        display_buffer[num_chars_written] = ' ';
+        ++num_chars_written;
+
+        // Get the menu line, as a string, at the top line + the line offset
         (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
+
+        // Copy the menu line to display_buffer
         if(nullptr != menu_line_str)
         {
-            display.print(/* const char *c = */ menu_line_str->c_str());
+            menu_line_str->toCharArray(
+                /* char *buf = */ &(display_buffer[num_chars_written]),
+                /* unsigned int bufsize = */ sizeof(display_buffer) - num_chars_written);
+            num_chars_written += menu_line_str->length();
         }
+
+        // End each line with a newline \n
+        display_buffer[num_chars_written] = '\n';
+        ++num_chars_written;
     }
+
+    // Set null terminating character
+    display_buffer[num_chars_written] = '\0';
+    ++num_chars_written;
+
+    // -------------------------------------- //
+    // Update display to match display buffer //
+    // -------------------------------------- //
+
+    // Clear existing characters on display
+    display.clear();
+
+    // Update the display at each line to match display_buffer
+    // This display API requires newlines to instead be null terminating characters
+    // Use sliding window (one pointer on the left and one on the right to say where the string starts and ends)
+    for(size_t line_num = 0, left = 0, right = 0; line_num < NUM_DISPLAY_LINES; ++line_num)
+    {
+        // Find the next newline, set it to null terminator
+        for(right = left; '\n' != display_buffer[right]; ++right);
+        display_buffer[right] = '\0';
+
+        // Update display line
+        display.setCursor(
+            /* int col = */ 0,
+            /* int row = */ line_num);
+        display.print(/* const char *c = */ &(display_buffer[left]));
+
+        // Get ready for next loop, undo modification
+        left = right + 1;
+        display_buffer[right] = '\n';
+    }
+
+    // ------------------------------------- //
+    // Send display buffer out over WiFi/TCP //
+    // ------------------------------------- //
+
+#if WIFI_ENABLED
+    (void) tcp_send(
+        /* void *packet = */ display_buffer,
+        /* size_t num_packet_bytes = */ num_chars_written);
+#endif // WIFI_ENABLED
+
+    // -------------------------------------- //
+    // Send display buffer out over Bluetooth //
+    // -------------------------------------- //
+
+#if BLUETOOTH_ENABLED
+    // TODO: write implementation
+#endif
 }

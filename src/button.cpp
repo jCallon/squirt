@@ -12,8 +12,8 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom debug macros
-#include "flags.h"
+// Include custom TCP/IP API
+#include "tcp_ip.h"
 
 // ======================= //
 // Instantiate useful data //
@@ -23,23 +23,23 @@
 Button buttons[NUM_BUTTONS] = {
     { 
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_UP_IN
     },
     { 
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_CONFIRM_IN
     },
     { 
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_DOWN_IN
     },
     // NOTE: PIN_BUTTON_SLEEP_IN MUST be defined last for current sleep logic to work
     {
         /* bool arg_is_pull_up = */ true,
-        /* uint8_t arg_ms_debounce = */ 50,
+        /* uint8_t arg_ms_debounce = */ 100,
         /* gpio_num_t arg_pin_in = */ PIN_BUTTON_SLEEP_IN
     }
 };
@@ -93,7 +93,7 @@ void init_buttons()
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "toggle_sleep",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 256,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 512,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ NULL,
         // The priority at which the task should run.
@@ -137,11 +137,35 @@ static void task_toggle_sleep_mode()
             display->display();
             display->backlight();
 
-            // NOTE: if I ever enable wireless protocols, re-enable them here
+#if WIFI_ENABLED
+            // Reinstantiate all TCP and WiFi connections
+            if(true == wifi_start(
+                /* char *wifi_ssid = */ WIFI_SSID,
+                /* char *wifi_password = */ WIFI_PASSWORD))
+            {
+                tcp_start(
+                    /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
+                    /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
+            }
+#endif
+
+#if BLUETOOTH_ENABLED
+            // Resume or restart BlueTooth
+#endif
         }
         // Otherwise, sleep the device
         else
         {
+#if WIFI_ENABLED
+            // Free all TCP and WiFi connections
+            (void) tcp_free();
+            (void) wifi_free();
+#endif
+
+#if BLUETOOTH_ENABLED
+            // Pause or stop BlueTooth
+#endif
+
             // Turn off screen
             display->noDisplay();
             display->noBacklight();
@@ -154,13 +178,11 @@ static void task_toggle_sleep_mode()
 
             // Pause task to read menu inputs
             vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ read_menu_input_queue_task_handle);
-
-            // NOTE: if I ever enable wireless protocols, disable them here
         }
 
         is_asleep = !is_asleep;
 
-        // 24AUG2024: usStackDepth = 1024 + 256, uxTaskGetHighWaterMark = 188
+        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 156
         PRINT_STACK_USAGE();
     }
 }
@@ -210,7 +232,9 @@ static void IRAM_ATTR intr_write_button_press(gpio_num_t gpio_pin)
         (void) xTaskResumeFromISR(/* TaskHandle_t xTaskToResume = */ toggle_sleep_mode_task_handle);
         return;
     }
-    from_isr_add_to_menu_input_queue(menu_input);
+    add_to_menu_input_queue(
+        /* MENU_INPUT_t menu_input = */ menu_input,
+        /* bool from_isr = */ true);
 }
 
 // ======================= //

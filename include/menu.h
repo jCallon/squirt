@@ -17,16 +17,22 @@
 // See button.h for more
 //#define PIN_I2C_DISPLAY_GND GND
 //#define PIN_I2C_DISPLAY_VCC VIN
-#define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_27)
-#define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_26)
+#define PIN_I2C_DISPLAY_SDA ((gpio_num_t) GPIO_NUM_19)
+#define PIN_I2C_DISPLAY_SCL ((gpio_num_t) GPIO_NUM_18)
 
 // Define display constants
 // Define I2C address for display, see your manufacturer notes to figure out yours
 #define DISPLAY_I2C_ADDR 0x27
 // Define the number of rows in the LCD display (the number of lines of characters)
-#define NUM_DISPLAY_ROWS 4
+#define NUM_DISPLAY_LINES 4
+#if NUM_DISPLAY_LINES < 1
+#error "Menu code requires at least one line on the display"
+#endif
 // Define the number of columns in the LCD display (the number of characters in each line)
-#define NUM_DISPLAY_COLUMNS 20
+#define NUM_DISPLAY_CHARS_PER_LINE 20
+#if NUM_DISPLAY_CHARS_PER_LINE < 2
+#error "Menu code requires at least 2 characters per line on the display"
+#endif
 
 enum MENU_INPUT_t : uint8_t
 {
@@ -39,8 +45,10 @@ enum MENU_INPUT_t : uint8_t
 
 // Initialze menu and its input queue/task
 void init_menu();
-// From an interrupt-service-routine, add a new menu_input to the back of the menu input queue
-void from_isr_add_to_menu_input_queue(MENU_INPUT_t menu_input);
+// Add a new menu_input to the back of the menu input queue
+void add_to_menu_input_queue(
+    MENU_INPUT_t menu_input,
+    bool from_isr);
 // Get the main display for the device
 LiquidCrystal_I2C *get_display();
 // Get the handle of the task that reads the menu input queue
@@ -108,6 +116,8 @@ class Menu
         size_t index_menu_item_hover;
         // Whether a menu item is currently selected, so menu inputs should be forwarded to the MenuLine's handlers instead of navigating Menu
         bool is_menu_item_selected;
+        // Store current screen buffer (it will be transmitted over WiFi or Bluetooth)
+        char display_buffer[sizeof('\0') + (NUM_DISPLAY_LINES * (NUM_DISPLAY_CHARS_PER_LINE + sizeof('\n')))];
 };
 
 #endif // __MENU_H__

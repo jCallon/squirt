@@ -15,8 +15,8 @@
 #include "button.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom debug macros
-#include "flags.h"
+// Include custom TCP/IP API
+#include "tcp_ip.h"
 
 // =========================== //
 // Initialize and start device //
@@ -36,6 +36,17 @@ void setup()
     init_menu();
     // Initialize GPIO buttons and their interrupts
     init_buttons();
+
+#if WIFI_ENABLED
+    if(true == wifi_start(
+        /* char *wifi_ssid = */ WIFI_SSID,
+        /* char *wifi_password = */ WIFI_PASSWORD))
+    {
+        tcp_start(
+            /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
+            /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);
+    }
+#endif // WIFI_ENABLED
 }
 
 // Don't have any need for a loop that runs forever, because we're using FreeRTOS tasks,

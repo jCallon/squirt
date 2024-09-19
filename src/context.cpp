@@ -2,7 +2,7 @@
 #include "context.h"
 // Include custom Menu class implementation
 #include "menu.h"
-// Include custom debug macros
+// Include custom debug macros and compile flags
 #include "flags.h"
 
 // ======================================= //
@@ -42,7 +42,7 @@ void task_rotate_servo(Servo *servo)
         // NOTE: lol this destroys the display when I don't have an external power supply nevermind
         //vTaskResume(/*TaskHandle_t xTaskToResume = */ get_toggle_sleep_mode_task_handle());
 
-        // 24AUG2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 352
+        // 19SEP2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 352
         PRINT_STACK_USAGE();
     }
 }
@@ -281,6 +281,7 @@ bool Context::get(
     // Copy the desired member to the passed in buffer
     // This is just a basic memcpy_s, but implemented by hand beause it's easy to do,
     // and I don't want to import the library
+    // TODO: Can I just use memcpy with min?
     bool status = false;
     if(num_bytes_src >= num_bytes_dst)
     {
@@ -405,7 +406,7 @@ String Context::str_time_last_humidity_check()
     // -------------------- //
     //   Last X: Fri 13:00  //
     // -------------------- //
-    char line[NUM_DISPLAY_COLUMNS - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
+    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
     // https://en.cppreference.com/w/cpp/chrono/c/strftime
     strftime(
         /* char* str = */ line,
@@ -421,7 +422,7 @@ String Context::str_time_next_humidity_check()
     // -------------------- //
     //   Next X: Fri 13:00  //
     // -------------------- //
-    char line[NUM_DISPLAY_COLUMNS - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
+    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
     // https://en.cppreference.com/w/cpp/chrono/c/strftime
     strftime(
         /* char* str = */ line,
