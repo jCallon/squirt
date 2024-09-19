@@ -41,10 +41,6 @@
 // - R = read
 // - W = write
 
-// ------------------------------------------------- //
-// Intended for sequential access, no mutex required //
-// ------------------------------------------------- //
-
 // Keep track of the handle to the WiFi event group, so we can set success and failure bits on its status
 // R | W | function
 // --+---+------------------
@@ -53,30 +49,31 @@
 // X | X | wifi_event_group_init
 // X | X | wifi_event_group_free
 // X | - | wifi_connect
-// Don't need a mutex if only one thread is calling the WiFi APIs at a time,
-// the only of these functions that may run in parallel (event_*) are read-only.
-// The rest of the functions are static (accessible from this file only)
-// and called sequentially by only wifi_start(...).
-// TODO: Make a mutex for accessing this API
+// NOTE: If events handler in an event groups are dispatched asynchronously,
+//       or any more of these function become accessible from outside the API
+//       and there therefore are no longer guraranteed to be called sequentuially,
+//       it's possible this global will have race conditions.
+//       Add more safety if this ever becomes an issue. Locking this API to only one thread at a time would help.
 EventGroupHandle_t event_group_handle_wifi = nullptr;
-
-// ------------------------------------------------- //
-// Intended for multithreaded access, mutex required //
-// ------------------------------------------------- //
 
 // Keep track of how many times the device has retried connecting to one AP in a row
 // R | W | function
 // --+---+------------------
 // X | X | event_any_wifi
 // - | X | event_got_ip
-// TODO: should this variable have a mutex?
+// NOTE: If events handler in an event groups are dispatched asynchronously,
+//       it's possible this global will have race conditions.
+//       Add more safety if this ever becomes an issue.
 size_t num_wifi_connect_retries = 0;
+
 // Keep track of the esp_netif object attaching netif to WiFi and registering WiFi handlers to the default event loop
 // R | W | function
 // --+---+------------------
-//   |   | 
-//   |   | 
-// TODO: should this variable have a mutex?
+// X | X | wifi_init
+// X | X | wifi_free
+// NOTE: Because wifi_free(...) is accessible from outside this file, meaning any thread anywhere can call it any time,
+//       it's possible this global will have race conditions if wifi_init(...) then wifi_free(...) are not called sequentially.
+//       Add more safety if this ever becomes an issue. Locking this API to only one thread at a time would help.
 void *esp_netif = nullptr;
 
 // ============================== //
@@ -105,7 +102,7 @@ static inline bool wifi_connect(
     char *wifi_ssid,
     char *wifi_password);
 
-// If all went well, by the end of this function, the device will have IP address
+// If all went well, by the end of this function, the device will have an IP address
 // and can connect to a socket to talk with other servers on a network
 bool wifi_start(
     char *wifi_ssid,
@@ -248,6 +245,7 @@ bool wifi_free()
 
     // Dealloc WiFi station
     esp_netif_destroy_default_wifi(/* void *esp_netif = */ esp_netif);
+    esp_netif = nullptr;
 
     // Dealloc default event loop
     ESP_ERROR_RECORD_FALSE_IF_FAILED(return_status, status, esp_event_loop_delete_default());
