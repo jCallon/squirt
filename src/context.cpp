@@ -42,7 +42,7 @@ void task_rotate_servo(Servo *servo)
         // NOTE: lol this destroys the display when I don't have an external power supply nevermind
         //vTaskResume(/*TaskHandle_t xTaskToResume = */ get_toggle_sleep_mode_task_handle());
 
-        // 24AUG2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 352
+        // 19SEP2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 352
         PRINT_STACK_USAGE();
     }
 }

@@ -182,7 +182,7 @@ static void task_toggle_sleep_mode()
 
         is_asleep = !is_asleep;
 
-        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 284
+        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 156
         PRINT_STACK_USAGE();
     }
 }

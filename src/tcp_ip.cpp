@@ -124,7 +124,7 @@ void task_read_ip_packets()
             }
         }
 
-        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 420
+        // 19SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 428
         PRINT_STACK_USAGE();
     }
 }
@@ -135,6 +135,7 @@ void task_read_ip_packets()
 
 // Connect to an existing TCP server and read IPv4 data
 // If you want to connect to IPv6 or use another protocol, please update this function
+// TODO: It seems I cannot sleep while waiting to connect to TCP
 bool tcp_start(
     uint32_t tcp_server_ipv4_addr,
     uint32_t tcp_server_port)

@@ -269,7 +269,7 @@ void task_read_menu_input_queue()
             menu.react_to_menu_input(/* MENU_INPUT_t menu_input = */ menu_input);
         }
 
-        // 17SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 520
+        // 19SEP2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 520
         PRINT_STACK_USAGE();
     }
 }
