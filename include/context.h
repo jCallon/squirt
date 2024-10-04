@@ -18,20 +18,6 @@
 //#define PIN_SOIL_MOISTURE_SENSOR_POS VIN
 #define PIN_SOIL_MOISTURE_SENSOR_IN ((gpio_num_t) GPIO_NUM_35)
 
-enum CONTEXT_MEMBER_t
-{
-    CONTEXT_MEMBER_MUTEX_HANDLE,
-    CONTEXT_MEMBER_SERVO,
-    CONTEXT_MEMBER_ROTATE_SERVO_TASK_HANDLE,
-    CONTEXT_MEMBER_PIN_SOIL_MOISTURE_SENSOR_IN,
-    CONTEXT_MEMBER_WATER_TASK_HANDLE,
-    CONTEXT_MEMBER_CURRENT_HUMIDITY,
-    CONTEXT_MEMBER_DESIRED_HUMIDITY,
-    CONTEXT_MEMBER_MINUTE_HUMIDITY_CHECK_FREQ,
-    CONTEXT_MEMBER_TIME_LAST_HUMIDITY_CHECK,
-    CONTEXT_MEMBER_TIME_NEXT_HUMIDITY_CHECK,
-};
-
 // The overall state the menu display and the sensors operate on
 class Context
 {
@@ -53,17 +39,6 @@ class Context
             bool in_isr,
             bool is_blocking);
 
-        // Copy a member of Context, thread-safely
-        bool copy(
-            CONTEXT_MEMBER_t member,
-            void *dst,
-            size_t num_bytes_dst);
-        // Set a member of Context, thread-safely
-        bool set(
-            CONTEXT_MEMBER_t member,
-            void *src,
-            size_t num_bytes_src);
-
         // Menu functions
         // TODO: Is there a better way to do this? Arguments? Lambdas?
 
@@ -84,14 +59,8 @@ class Context
         String str_time_last_humidity_check();
         // Convert time_next_humidity_check into a human-readable string
         String str_time_next_humidity_check();
-    private:
-        // Get the pointer to and number of bytes of a member of Context
-        // Return whether the member could be found and copied to
-        bool get(
-            CONTEXT_MEMBER_t member,
-            void **data,
-            size_t *num_bytes_data);
 
+    private:
         // A mutex to keep updating all members of this class thread-safe
         SemaphoreHandle_t mutex_handle;
         // A handle to the servo motor
