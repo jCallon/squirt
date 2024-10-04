@@ -48,10 +48,10 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
 {
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_percent_desired_humidity(); },
-        /* bool (*arg_func_on_up)() = */ []() { return context.add_percent_desired_humidity(); },
-        /* bool (*arg_func_on_confirm)() = */ nullptr,
-        /* bool (*arg_func_on_down)() = */ []() { return context.subtract_percent_desired_humidity(); }
+        /* String (*arg_func_to_str)() = */ []() { return context.str_desired_humidity(); },
+        /* bool (*arg_func_on_up)() = */ nullptr,
+        /* bool (*arg_func_on_confirm)() = */ []() { return context.update_desired_humidity(); },
+        /* bool (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
