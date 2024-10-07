@@ -1,7 +1,5 @@
 // Include custom Context class implementation
 #include "context.h"
-// Include custom Menu class implementation
-#include "menu.h"
 // Include custom debug macros and compile flags
 #include "flags.h"
 
@@ -58,7 +56,7 @@ void task_water(Context *context)
 
         // Update context's current humidity, time last checked, and time of next check
         // if we fail, oh well, not really worth waiting until it works
-        (void) context->check_humidity();
+        (void) context->check_humidity(/* bool move_time_next_humidity_check = */ true);
 
         // While we are not at our desired humidity, add more water
         // TODO: Optimize the number of sensor polls needed.
@@ -69,7 +67,7 @@ void task_water(Context *context)
         while(true == context->is_current_humidity_below_desired())
         {
             // Trigger servo motor to squirt, wait until it finishes
-            context->spray(
+            (void) context->spray(
                 /* bool in_isr = */ false,
                 /* bool is_blocking = */ true);
 
@@ -78,7 +76,7 @@ void task_water(Context *context)
 
             // Update reading
             // if we fail, oh well, not really worth waiting until it works
-            (void) context->check_humidity();
+            (void) context->check_humidity(/* bool move_time_next_humidity_check = */ true);
         }
 
         // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
@@ -106,7 +104,16 @@ Context::Context(
     // Remember the pin of the soil moisture sensor
     pin_soil_moisture_sensor_in = arg_pin_soil_moisture_sensor_in;
 
-    // Create task to rotate servo motor an interrupt can 'call'
+    // Set the humidity check frequency to a default of 1 hour
+    // TODO: get minute_humidity_check_freq from and write to persistent memory, flash?
+    minute_humidity_check_freq = 60;
+
+    // Get the current humidity, set the desired humidity to the current
+    // TODO: get desired_humidity from and write to persistent memory, flash?
+    check_humidity(/* bool move_time_next_humidity_check = */ true);
+    desired_humidity = current_humidity;
+
+    // Create task to rotate servo motor (it can take several seconds)
     // TODO: Look into static memory allocation instead?
     xTaskCreate(
         // Pointer to the task entry function. Tasks must be implemented to never return (i.e. continuous loop).
@@ -143,65 +150,59 @@ Context::Context(
         // Used to pass back a handle by which the created task can be referenced.
         /* TaskHandle_t *const pxCreatedTask = */ &water_task_handle);
     configASSERT(water_task_handle);
-
-    // TODO: read setting from previous run
-    desired_humidity = 25;
-    // TODO: read setting from previous run
-    minute_humidity_check_freq = 100;
-
-    check_humidity();
 }
 
 bool Context::is_humidity_check_overdue()
 {
-    // Take the Context sempahore to prevent miscellaneous reads and writes from other threads
-    if(pdFALSE == xSemaphoreTake(/* xSemaphore = */ mutex_handle, /* xBlockTime = */ 1000))
-    {
-        return false;
-    }
-
     // If the time of the next check is after the current time, we're overdue
+    CONTEXT_LOCK(/* RET_VAL = */ false);
     bool is_overdue = time(/* time_t *arg = */ nullptr) >= time_next_humidity_check;
+    CONTEXT_UNLOCK();
 
-    // Return mutex so other threads can read and write to context members again
-    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    // Return result of check
     return is_overdue;
 }
 
 bool Context::is_current_humidity_below_desired()
 {
-    // Take the Context sempahore to prevent miscellaneous reads and writes from other threads
-    if(pdFALSE == xSemaphoreTake(/* xSemaphore = */ mutex_handle, /* xBlockTime = */ 1000))
-    {
-        return false;
-    }
-
+    // If the current humidity is below the desired humidity, well
+    CONTEXT_LOCK(/* RET_VAL = */ false);
     bool is_current_below_desired = current_humidity < desired_humidity;
+    CONTEXT_UNLOCK();
 
-    // Return mutex so other threads can read and write to context members again
-    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+    // Return result of check
     return is_current_below_desired;
 }
 
-bool Context::check_humidity()
+MENU_CONTROL Context::check_humidity(bool move_time_next_humidity_check)
 {
-    // Take the Context sempahore to prevent miscellaneous reads and writes from other threads
-    if(pdFALSE == xSemaphoreTake(/* xSemaphore = */ mutex_handle, /* xBlockTime = */ 1000))
-    {
-        return false;
-    }
-
-    // Update context's current humidity, time last checked, and time of next check
+    // Update context's current humidity to the analog pin, time last checked to now, and time of next check (if desired)
+    // Most systems implement time_t as the number of seconds since the last epoch
+    CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
     current_humidity = analogRead(pin_soil_moisture_sensor_in);
     time_last_humidity_check = time(/* time_t *arg = */ nullptr);
-    time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+    if(move_time_next_humidity_check)
+    {
+        time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+    }
+    CONTEXT_UNLOCK();
 
-    // Return mutex so other threads can read and write to context members again
-    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
-    return true;
+    // Return control to the menu
+    return MENU_CONTROL_RELEASE;
 }
 
-bool Context::spray(
+MENU_CONTROL Context::water()
+{
+    // Run task_water by updating its wait condition
+    CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
+    time_next_humidity_check = time(/* time_t *arg = */ nullptr);
+    CONTEXT_UNLOCK();
+
+    // Return control to the menu
+    return MENU_CONTROL_RELEASE;
+}
+
+MENU_CONTROL Context::spray(
     bool in_isr,
     bool is_blocking)
 {
@@ -226,88 +227,71 @@ bool Context::spray(
     }
 
     // Return control to the menu
-    return true;
+    return MENU_CONTROL_RELEASE;
 }
 
-bool Context::add_minute_humidity_check_freq()
+MENU_CONTROL Context::set_desired_humidity_to_current()
 {
-    // Wait until the mutex is free, or 1000 milliseconds
-    // If the mutex could not be taken within 1000 milliseconds, don't do anything
-    if(pdFALSE == xSemaphoreTake(
-        /* xSemaphore = */ mutex_handle,
-        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
-    {
-        return false;
-    }
+    // Set the desired humidity to match the last known humidity
+    CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
+    desired_humidity = current_humidity;
+    CONTEXT_UNLOCK();
 
-    // Alter the humidity check frequenecy and next humidity check time
-    ++minute_humidity_check_freq;
-    time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+    // Return control to the menu
+    return MENU_CONTROL_RELEASE;
+}
 
-    // Free the mutex
-    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
+MENU_CONTROL Context::add_minute_humidity_check_freq(int num_minutes)
+{
+    // Alter the humidity check frequenecy
+    CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_KEEP);
+    minute_humidity_check_freq += num_minutes;
+    CONTEXT_UNLOCK();
 
     // Do not return control to the menu
-    return false;
+    return MENU_CONTROL_KEEP;
 }
 
-bool Context::subtract_percent_desired_humidity()
-{
-    // Wait until the mutex is free, or 1000 milliseconds
-    // If the mutex could not be taken within 1000 milliseconds, don't do anything
-    if(pdFALSE == xSemaphoreTake(
-        /* xSemaphore = */ mutex_handle,
-        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
-    {
-        return false;
-    }
-
-    // Alter the desired humidty and account for underflow
-    percent_desired_humidity = (percent_desired_humidity <= 0) ? 100 : (percent_desired_humidity - 1);
-
-    // Free the mutex
-    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
-
-    // Do not return control to the menu
-    return false;
-}
-
-bool Context::subtract_minute_humidity_check_freq()
-{
-    // Wait until the mutex is free, or 1000 milliseconds
-    // If the mutex could not be taken within 1000 milliseconds, don't do anything
-    if(pdFALSE == xSemaphoreTake(
-        /* xSemaphore = */ mutex_handle,
-        /* xBlockTime = */ pdMS_TO_TICKS(1000)))
-    {
-        return false;
-    }
-
-    // Alter the humidity check frequenecy and next humidity check time
-    --minute_humidity_check_freq;
-    time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
-
-    // Free the mutex
-    xSemaphoreGive(/* xSemaphore = */ mutex_handle);
-
-    // Do not return control to the menu
-    return false;
-}
-
-String Context::str_percent_desired_humidity()
+String Context::str_current_humidity()
 {
     // -------------------- //
-    //   Goal X: 100%       //
+    //   Current X: 65535   //
     // -------------------- //
-    return String("Goal X: " + String(percent_desired_humidity, DEC) + "%");
+    String ret = String("Current X: ");
+
+    CONTEXT_LOCK(/* RET_VAL = */ ret);
+    uint16_t cpy = current_humidity;
+    CONTEXT_UNLOCK();
+
+    return ret + String(cpy, DEC);
+}
+
+String Context::str_desired_humidity()
+{
+    // -------------------- //
+    //   Desired X: 65535   //
+    // -------------------- //
+    String ret = String("Desired X: ");
+
+    CONTEXT_LOCK(/* RET_VAL = */ ret);
+    uint16_t cpy = desired_humidity;
+    CONTEXT_UNLOCK();
+
+    return ret + String(cpy, DEC);
 }
 
 String Context::str_minute_humidity_check_freq()
 {
     // -------------------- //
-    //   X freq: 100%       //
+    //   X freq: 100 min    //
     // -------------------- //
-    return String("X freq: " + String(minute_humidity_check_freq, DEC) + " min");
+    String ret = String("X freq: ");
+
+    CONTEXT_LOCK(/* RET_VAL = */ ret);
+    uint32_t cpy = minute_humidity_check_freq;
+    CONTEXT_UNLOCK();
+
+    return ret + String(cpy, DEC) + String(" min");
 }
 
 String Context::str_time_last_humidity_check()
@@ -315,15 +299,20 @@ String Context::str_time_last_humidity_check()
     // -------------------- //
     //   Last X: Fri 13:00  //
     // -------------------- //
-    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
+    String ret = String("Last X: ");
+
+    CONTEXT_LOCK(/* RET_VAL = */ ret);
+    time_t cpy = time_last_humidity_check;
+    CONTEXT_UNLOCK();
+
     // https://en.cppreference.com/w/cpp/chrono/c/strftime
+    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
     strftime(
         /* char* str = */ line,
         /* std::size_t count = */ sizeof(line),
         /* const char* format = */ "%a %H:%M",
-        // TODO: Comment args
-        /* const std::tm* tp = */ localtime(&time_last_humidity_check));
-    return String("Last X: " + String(line));
+        /* const std::tm* tp = */ localtime(/* const std::time_t* time = */ &cpy));
+    return ret + String(line);
 }
 
 String Context::str_time_next_humidity_check()
@@ -331,13 +320,18 @@ String Context::str_time_next_humidity_check()
     // -------------------- //
     //   Next X: Fri 13:00  //
     // -------------------- //
-    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
+    String ret = String("Next X: ");
+
+    CONTEXT_LOCK(/* RET_VAL = */ ret);
+    time_t cpy = time_next_humidity_check;
+    CONTEXT_UNLOCK();
+
     // https://en.cppreference.com/w/cpp/chrono/c/strftime
+    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
     strftime(
         /* char* str = */ line,
         /* std::size_t count = */ sizeof(line),
         /* const char* format = */ "%a %H:%M",
-        // TODO: Comment args
-        /* const std::tm* tp = */ localtime(&time_next_humidity_check));
-    return String("Next X: " + String(line));
+        /* const std::tm* tp = */ localtime(/* const std::time_t* time = */ &cpy));
+    return ret + String(line);
 }

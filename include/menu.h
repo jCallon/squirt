@@ -54,6 +54,13 @@ LiquidCrystal_I2C *get_display();
 // Get the handle of the task that reads the menu input queue
 TaskHandle_t get_read_menu_input_queue_task_handle();
 
+// TODO: comment
+typedef bool MENU_CONTROL;
+// Stay in sub-menu after finishing
+#define MENU_CONTROL_KEEP true
+// Return to main menu after finishing
+#define MENU_CONTROL_RELEASE false
+
 // A line within a Menu
 class MenuLine
 {
@@ -67,7 +74,7 @@ class MenuLine
             bool (*arg_func_on_down)());
         // Call func_on_* based on what menu input was received
         // Returns true if, after this press, it is giving control back to the menu.
-        bool react_to_menu_input(MENU_INPUT_t input);
+        MENU_CONTROL react_to_menu_input(MENU_INPUT_t input);
         // Get the string this menu line should currently be displaying as
         // If the function returns true, that means the string has changed since it was last requested,
         // and the display should be updated, if this line is on the screen
@@ -82,13 +89,13 @@ class MenuLine
         String (*func_to_str)();
         // When a user clicks confirm on this menu line while modifying it, the function it will call.
         // It should return true if, after this press, it is giving control back to the menu.
-        bool (*func_on_confirm)();
+        MENU_CONTROL (*func_on_confirm)();
         // When a user clicks up on this menu line while modifying it, the function it will call.
         // It should return true if, after this press, it is giving control back to the menu.
-        bool (*func_on_up)();
+        MENU_CONTROL (*func_on_up)();
         // When a user clicks down on this menu line while modifying it, the function it will call.
         // It should return true if, after this press, it is giving control back to the menu.
-        bool (*func_on_down)();
+        MENU_CONTROL (*func_on_down)();
         // Sometimes a menu option wil take more than once press of confirm, such as when changing a string.
         // Use this counter to keep track of how far you are.
         //bool num_confirm;

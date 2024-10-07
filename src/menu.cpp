@@ -12,7 +12,7 @@
 // ======================= //
 
 // Define the number of lines in menu_lines
-#define NUM_MENU_LINES 6
+#define NUM_MENU_LINES 7
 
 // ======================= //
 // Instantiate useful data //
@@ -48,45 +48,53 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
 {
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_desired_humidity(); },
-        /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ []() { return context.update_desired_humidity(); },
-        /* bool (*arg_func_on_down)() = */ nullptr
+        /* String (*arg_func_to_str)() = */ []() { return context.str_current_humidity(); },
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.check_humidity(/* bool move_time_next_humidity_check = */ false); },
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_minute_humidity_check_freq(); },
-        /* bool (*arg_func_on_up)() = */ []() { return context.add_minute_humidity_check_freq(); },
-        /* bool (*arg_func_on_confirm)() = */ nullptr,
-        /* bool (*arg_func_on_down)() = */ []() { return context.subtract_minute_humidity_check_freq(); }
+        /* String (*arg_func_to_str)() = */ []() { return context.str_desired_humidity(); },
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.set_desired_humidity_to_current(); },
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
         /* String (*arg_func_to_str)() = */ []() { return context.str_time_last_humidity_check(); },
-        /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ nullptr,
-        /* bool (*arg_func_on_down)() = */ nullptr
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
         /* String (*arg_func_to_str)() = */ []() { return context.str_time_next_humidity_check(); },
-        /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ nullptr,
-        /* bool (*arg_func_on_down)() = */ nullptr
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
-        /* String str_display = */ String("Check X"),
-        /* String (*arg_func_to_str)() = */ nullptr,
-        /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ []() { return context.check_humidity(/* bool in_isr = */ false); },
-        /* bool (*arg_func_on_down)() = */ nullptr
+        /* String str_display = */ String(""),
+        /* String (*arg_func_to_str)() = */ []() { return context.str_minute_humidity_check_freq(); },
+        /* MENU_CONTROL (*arg_func_on_up)() = */ []() { return context.add_minute_humidity_check_freq(/* int num_minutes = */ 5); },
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_down)() = */ []() {  return context.add_minute_humidity_check_freq(/* int num_minutes = */ -5); }
     },
     {
-        /* String str_display = */ String("Trigger spray"),
+        /* String str_display = */ String("X now"),
         /* String (*arg_func_to_str)() = */ nullptr,
-        /* bool (*arg_func_on_up)() = */ nullptr,
-        /* bool (*arg_func_on_confirm)() = */ []() { return context.spray(/* bool in_isr = */ false); },
-        /* bool (*arg_func_on_down)() = */ nullptr
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.check_humidity(/* bool move_time_next_humidity_check = */ true); },
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
+    },
+    {
+        /* String str_display = */ String("Test spray"),
+        /* String (*arg_func_to_str)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.spray(/* bool in_isr = */ false,
+            /* bool is_blocking = */ false); },
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     }
 };
 
@@ -293,7 +301,7 @@ MenuLine::MenuLine(
     func_on_down = arg_func_on_down;
 }
 
-bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
+MENU_CONTROL MenuLine::react_to_menu_input(MENU_INPUT_t input)
 {
     // Get the function to call based on the input received
     // NOTE: can use hashmap instead of switch statement, ex. func_to_call = funcs[MENU_INPUT_UP]
@@ -316,14 +324,15 @@ bool MenuLine::react_to_menu_input(MENU_INPUT_t input)
     // If there is not a function defined for this input, do nothing
     if (nullptr == func_to_call)
     {
-        return true;
+        return MENU_CONTROL_RELEASE;
     }
 
     // Call the function
-    bool status = (*func_to_call)();
+    MENU_CONTROL status = (*func_to_call)();
 
     // Record whether the display is not showing the current updates
     // TODO: Pass is_str_and_data_desynced as argument instead so functions can set this?
+    // TODO: create task to poll for screen updates
     if ((MENU_INPUT_UP == input) ||
         (MENU_INPUT_DOWN == input))
     {
@@ -367,7 +376,7 @@ void Menu::react_to_menu_input(MENU_INPUT_t menu_input)
     if(true == is_menu_item_selected)
     {
         // The menu line handler tells if after this button press, the menu should consume inputs again instead of the menu line
-        is_menu_item_selected = !(menu_lines[index_menu_item_hover].react_to_menu_input(menu_input));
+        is_menu_item_selected = (MENU_CONTROL_KEEP == menu_lines[index_menu_item_hover].react_to_menu_input(menu_input));
     }
     else
     {
