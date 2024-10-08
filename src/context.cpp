@@ -116,10 +116,8 @@ Context::Context(
     // Get the current humidity, set the desired humidity to the current
     // TODO: get desired_humidity from and write to persistent memory, flash?
     // TODO: is this being called before esp_timer_early_init?
-    current_humidity = analogRead(pin_soil_moisture_sensor_in);
+    check_humidity(/* bool move_time_next_humidity_check = */ true);
     desired_humidity = current_humidity;
-    ms_last_humidity_check = 0;
-    ms_next_humidity_check = minute_humidity_check_freq * 60 * 1000;
 
     // Create task to rotate servo motor (it can take several seconds)
     // TODO: Look into static memory allocation instead?
@@ -164,7 +162,7 @@ bool Context::is_humidity_check_overdue()
 {
     // If the time of the next check is after the current time, we're overdue
     CONTEXT_LOCK(/* RET_VAL = */ false);
-    bool is_overdue = esp_timer_get_time() >= ms_next_humidity_check;
+    bool is_overdue = time(/* time_t *_timer = */ nullptr) >= time_next_humidity_check;
     CONTEXT_UNLOCK();
 
     // Return result of check
@@ -187,11 +185,11 @@ MENU_CONTROL Context::check_humidity(bool update_next_humidity_check)
     // Update context's current humidity to the analog pin, time last checked to now, and time of next check (if desired)
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
     current_humidity = analogRead(pin_soil_moisture_sensor_in);
-    ms_last_humidity_check = esp_timer_get_time();
+    time_last_humidity_check = time(/* time_t *_timer = */ nullptr);
     if(update_next_humidity_check)
     {
-        // There are 1000 milliseconds in a second, and 60 seconds in a minute
-        ms_next_humidity_check = ms_last_humidity_check + (minute_humidity_check_freq * 60 * 1000);
+        // time_t is usally reperesented as seconds since the last epoch
+        time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
     }
     CONTEXT_UNLOCK();
 
@@ -203,7 +201,7 @@ MENU_CONTROL Context::water()
 {
     // Run task_water by updating its wait condition
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
-    ms_next_humidity_check = esp_timer_get_time();
+    time_next_humidity_check = time(/* time_t *_timer = */ nullptr);
     CONTEXT_UNLOCK();
 
     // Return control to the menu
@@ -302,7 +300,7 @@ String Context::str_minute_humidity_check_freq()
     return ret + String(cpy, DEC) + String(" min");
 }
 
-String Context::str_ms_last_humidity_check()
+String Context::str_time_last_humidity_check()
 {
     // -------------------- //
     //   X read: 999min ago //
@@ -314,27 +312,20 @@ String Context::str_ms_last_humidity_check()
     String ret = String("X read: ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    int64_t cpy = ms_last_humidity_check;
+    time_t cpy = time_last_humidity_check;
     CONTEXT_UNLOCK();
 
     // The time difference in minutes is:
-    // (current time - time of last check) * (1 second / 1000 milliseconds) * (1 minute / 60 seconds)
+    // (current time - time of last check) * (1 second / 1000 milliseconds)
     // TODO: How does the ESP32 round its integer math?
-    int64_t min_diff = (esp_timer_get_time() - cpy) / (1000 * 60);
-
-    Serial.print("cpy: ");
-    Serial.println(cpy, DEC);
-    Serial.print("esp_timer_get_time(): ");
-    Serial.println(esp_timer_get_time(), DEC);
-    Serial.print("min_diff: ");
-    Serial.println(min_diff, DEC);
+    uint64_t min_diff = (time(/* time_t *_timer = */ nullptr) - cpy) / 60;
 
     return ret + ((min_diff < 999) ?
         String(min_diff, DEC) + String("min ago") :
         String(min_diff / 60, DEC) + String("hr ago"));
 }
 
-String Context::str_ms_next_humidity_check()
+String Context::str_time_next_humidity_check()
 {
     // -------------------- //
     //   Next X: in 999min  //
@@ -346,20 +337,13 @@ String Context::str_ms_next_humidity_check()
     String ret = String("Next X: in ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    int64_t cpy = ms_next_humidity_check;
+    time_t cpy = time_next_humidity_check;
     CONTEXT_UNLOCK();
 
     // The time difference in minutes is:
     // (time of next check - current time) * (1 second / 1000 milliseconds) * (1 minute / 60 seconds)
     // TODO: How does the ESP32 round its integer math?
-    int64_t min_diff = (cpy - esp_timer_get_time()) / (1000 * 60);
-
-    Serial.print("cpy: ");
-    Serial.println(cpy, DEC);
-    Serial.print("esp_timer_get_time(): ");
-    Serial.println(esp_timer_get_time(), DEC);
-    Serial.print("min_diff: ");
-    Serial.println(min_diff, DEC);
+    uint64_t min_diff = (cpy - time(/* time_t *_timer = */ nullptr)) / 60;
 
     return ret + ((min_diff < 999) ?
         String(min_diff, DEC) + String("min") :

@@ -62,14 +62,14 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_ms_last_humidity_check(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_time_last_humidity_check(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_ms_next_humidity_check(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_time_next_humidity_check(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
@@ -334,7 +334,7 @@ MENU_CONTROL MenuLine::react_to_menu_input(MENU_INPUT_t input)
 
 void MenuLine::get_str(String **arg_str)
 {
-    // Only generate a new string if there's a function to do it and a change has happened to the underlying data
+    // Only generate a new string if there's a function to do it
     if (nullptr != func_to_str)
     {
         str_display = (*func_to_str)();
