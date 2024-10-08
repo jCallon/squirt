@@ -44,7 +44,7 @@ class Context
         bool is_current_humidity_below_desired();
         // Poll the humidity sensor, update context with its reading,
         // the time of its reading, and when the next reading should be
-        MENU_CONTROL check_humidity(bool move_time_next_humidity_check);
+        MENU_CONTROL check_humidity(bool update_next_humidity_check);
         // Start task_water, telling the servo to move many times until the desired humidity is reached
         MENU_CONTROL water();
         // Start task_rotate_servo, telling the servo to move once
@@ -66,9 +66,9 @@ class Context
         // Convert minute_humidity_check_freq into a human-readable string
         String str_minute_humidity_check_freq();
         // Convert time_last_humidity_check into a human-readable string
-        String str_time_last_humidity_check();
+        String str_ms_last_humidity_check();
         // Convert time_next_humidity_check into a human-readable string
-        String str_time_next_humidity_check();
+        String str_ms_next_humidity_check();
 
     private:
         // A mutex to keep updating all members of this class thread-safe
@@ -88,9 +88,9 @@ class Context
         // How often to check the current humidity, in minutes
         uint32_t minute_humidity_check_freq;
         // The time when the humidity was last checked
-        time_t time_last_humidity_check;
+        int64_t ms_last_humidity_check;
         // The time when the humidity should next be checked
-        time_t time_next_humidity_check;
+        int64_t ms_next_humidity_check;
 };
 
 // Define a task for if you want to rotate the servo

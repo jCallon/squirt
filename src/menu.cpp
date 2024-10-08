@@ -62,14 +62,14 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_time_last_humidity_check(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_ms_last_humidity_check(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_time_next_humidity_check(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_ms_next_humidity_check(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
@@ -96,6 +96,8 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
             /* bool is_blocking = */ false); },
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     }
+    // TODO: have menu to show if successfully connected to WiFi and TCP
+    // TODO: have option to automatically update display every X seconds
 };
 
 // Create an instance of a menu
@@ -295,7 +297,6 @@ MenuLine::MenuLine(
 {
     str_display = arg_str_display;
     func_to_str = arg_func_to_str;
-    is_str_and_data_desynced = (arg_func_to_str != nullptr);
     func_on_up = arg_func_on_up;
     func_on_confirm = arg_func_on_confirm;
     func_on_down = arg_func_on_down;
@@ -328,32 +329,17 @@ MENU_CONTROL MenuLine::react_to_menu_input(MENU_INPUT_t input)
     }
 
     // Call the function
-    MENU_CONTROL status = (*func_to_call)();
-
-    // Record whether the display is not showing the current updates
-    // TODO: Pass is_str_and_data_desynced as argument instead so functions can set this?
-    // TODO: create task to poll for screen updates
-    if ((MENU_INPUT_UP == input) ||
-        (MENU_INPUT_DOWN == input))
-    {
-        is_str_and_data_desynced = true;
-    }
-
-    return status;
+    return (*func_to_call)();
 }
 
-bool MenuLine::get_str(String **arg_str)
+void MenuLine::get_str(String **arg_str)
 {
     // Only generate a new string if there's a function to do it and a change has happened to the underlying data
-    if ((nullptr != func_to_str) &&
-        (true == is_str_and_data_desynced))
+    if (nullptr != func_to_str)
     {
         str_display = (*func_to_str)();
     }
     *arg_str = &str_display;
-    bool status = is_str_and_data_desynced;
-    is_str_and_data_desynced = false;
-    return status;
 }
 
 // ===================== //
@@ -435,7 +421,7 @@ void Menu::update_display()
         ++num_chars_written;
 
         // Get the menu line, as a string, at the top line + the line offset
-        (void) menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
+        menu_lines[(index_menu_item_hover + line_num) % num_menu_lines].get_str(/* char **arg_str = */ &menu_line_str);
 
         // Copy the menu line to display_buffer
         if(nullptr != menu_line_str)

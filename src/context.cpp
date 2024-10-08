@@ -56,7 +56,7 @@ void task_water(Context *context)
 
         // Update context's current humidity, time last checked, and time of next check
         // if we fail, oh well, not really worth waiting until it works
-        (void) context->check_humidity(/* bool move_time_next_humidity_check = */ true);
+        (void) context->check_humidity(/* bool update_next_humidity_check = */ true);
 
         // While we are not at our desired humidity, add more water
         // TODO: Optimize the number of sensor polls needed.
@@ -76,7 +76,7 @@ void task_water(Context *context)
 
             // Update reading
             // if we fail, oh well, not really worth waiting until it works
-            (void) context->check_humidity(/* bool move_time_next_humidity_check = */ true);
+            (void) context->check_humidity(/* bool update_next_humidity_check = */ true);
         }
 
         // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
@@ -94,9 +94,9 @@ Context::Context(
     gpio_num_t arg_pin_soil_moisture_sensor_in)
 {
     // Create mutex, open it for grabbing
+    // NOTE: "Mutex type semaphores cannot be used from within interrupt service routines."
     mutex_handle = xSemaphoreCreateMutexStatic(/* pxMutexBuffer = */ arg_mutex_buffer);
     assert(nullptr != mutex_handle);
-    xSemaphoreGive(/* xSempahore = */ mutex_handle);
 
     // Attach servo
     servo.attach(/* int pin = */ arg_pin_servo_out);
@@ -104,14 +104,22 @@ Context::Context(
     // Remember the pin of the soil moisture sensor
     pin_soil_moisture_sensor_in = arg_pin_soil_moisture_sensor_in;
 
+    // Set the ADC attenuation to 11 dB (up to ~3.3V input)
+    // https://esp32io.com/tutorials/esp32-soil-moisture-sensor
+    // TODO: What is this and how do I un-Arduino it?
+    analogSetAttenuation(ADC_11db);
+
     // Set the humidity check frequency to a default of 1 hour
     // TODO: get minute_humidity_check_freq from and write to persistent memory, flash?
     minute_humidity_check_freq = 60;
 
     // Get the current humidity, set the desired humidity to the current
     // TODO: get desired_humidity from and write to persistent memory, flash?
-    check_humidity(/* bool move_time_next_humidity_check = */ true);
+    // TODO: is this being called before esp_timer_early_init?
+    current_humidity = analogRead(pin_soil_moisture_sensor_in);
     desired_humidity = current_humidity;
+    ms_last_humidity_check = 0;
+    ms_next_humidity_check = minute_humidity_check_freq * 60 * 1000;
 
     // Create task to rotate servo motor (it can take several seconds)
     // TODO: Look into static memory allocation instead?
@@ -156,7 +164,7 @@ bool Context::is_humidity_check_overdue()
 {
     // If the time of the next check is after the current time, we're overdue
     CONTEXT_LOCK(/* RET_VAL = */ false);
-    bool is_overdue = time(/* time_t *arg = */ nullptr) >= time_next_humidity_check;
+    bool is_overdue = esp_timer_get_time() >= ms_next_humidity_check;
     CONTEXT_UNLOCK();
 
     // Return result of check
@@ -174,16 +182,16 @@ bool Context::is_current_humidity_below_desired()
     return is_current_below_desired;
 }
 
-MENU_CONTROL Context::check_humidity(bool move_time_next_humidity_check)
+MENU_CONTROL Context::check_humidity(bool update_next_humidity_check)
 {
     // Update context's current humidity to the analog pin, time last checked to now, and time of next check (if desired)
-    // Most systems implement time_t as the number of seconds since the last epoch
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
     current_humidity = analogRead(pin_soil_moisture_sensor_in);
-    time_last_humidity_check = time(/* time_t *arg = */ nullptr);
-    if(move_time_next_humidity_check)
+    ms_last_humidity_check = esp_timer_get_time();
+    if(update_next_humidity_check)
     {
-        time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+        // There are 1000 milliseconds in a second, and 60 seconds in a minute
+        ms_next_humidity_check = ms_last_humidity_check + (minute_humidity_check_freq * 60 * 1000);
     }
     CONTEXT_UNLOCK();
 
@@ -195,7 +203,7 @@ MENU_CONTROL Context::water()
 {
     // Run task_water by updating its wait condition
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
-    time_next_humidity_check = time(/* time_t *arg = */ nullptr);
+    ms_next_humidity_check = esp_timer_get_time();
     CONTEXT_UNLOCK();
 
     // Return control to the menu
@@ -294,44 +302,66 @@ String Context::str_minute_humidity_check_freq()
     return ret + String(cpy, DEC) + String(" min");
 }
 
-String Context::str_time_last_humidity_check()
+String Context::str_ms_last_humidity_check()
 {
     // -------------------- //
-    //   Last X: Fri 13:00  //
+    //   X read: 999min ago //
     // -------------------- //
-    String ret = String("Last X: ");
+    // or
+    // -------------------- //
+    //   X read: 9999hr ago //
+    // -------------------- //
+    String ret = String("X read: ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    time_t cpy = time_last_humidity_check;
+    int64_t cpy = ms_last_humidity_check;
     CONTEXT_UNLOCK();
 
-    // https://en.cppreference.com/w/cpp/chrono/c/strftime
-    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
-    strftime(
-        /* char* str = */ line,
-        /* std::size_t count = */ sizeof(line),
-        /* const char* format = */ "%a %H:%M",
-        /* const std::tm* tp = */ localtime(/* const std::time_t* time = */ &cpy));
-    return ret + String(line);
+    // The time difference in minutes is:
+    // (current time - time of last check) * (1 second / 1000 milliseconds) * (1 minute / 60 seconds)
+    // TODO: How does the ESP32 round its integer math?
+    int64_t min_diff = (esp_timer_get_time() - cpy) / (1000 * 60);
+
+    Serial.print("cpy: ");
+    Serial.println(cpy, DEC);
+    Serial.print("esp_timer_get_time(): ");
+    Serial.println(esp_timer_get_time(), DEC);
+    Serial.print("min_diff: ");
+    Serial.println(min_diff, DEC);
+
+    return ret + ((min_diff < 999) ?
+        String(min_diff, DEC) + String("min ago") :
+        String(min_diff / 60, DEC) + String("hr ago"));
 }
 
-String Context::str_time_next_humidity_check()
+String Context::str_ms_next_humidity_check()
 {
     // -------------------- //
-    //   Next X: Fri 13:00  //
+    //   Next X: in 999min  //
     // -------------------- //
-    String ret = String("Next X: ");
+    // or
+    // -------------------- //
+    //   Next X: in 9999hr  //
+    // -------------------- //
+    String ret = String("Next X: in ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    time_t cpy = time_next_humidity_check;
+    int64_t cpy = ms_next_humidity_check;
     CONTEXT_UNLOCK();
 
-    // https://en.cppreference.com/w/cpp/chrono/c/strftime
-    char line[NUM_DISPLAY_CHARS_PER_LINE - sizeof('>') - sizeof(' ') + sizeof('\0')] = { 0 };
-    strftime(
-        /* char* str = */ line,
-        /* std::size_t count = */ sizeof(line),
-        /* const char* format = */ "%a %H:%M",
-        /* const std::tm* tp = */ localtime(/* const std::time_t* time = */ &cpy));
-    return ret + String(line);
+    // The time difference in minutes is:
+    // (time of next check - current time) * (1 second / 1000 milliseconds) * (1 minute / 60 seconds)
+    // TODO: How does the ESP32 round its integer math?
+    int64_t min_diff = (cpy - esp_timer_get_time()) / (1000 * 60);
+
+    Serial.print("cpy: ");
+    Serial.println(cpy, DEC);
+    Serial.print("esp_timer_get_time(): ");
+    Serial.println(esp_timer_get_time(), DEC);
+    Serial.print("min_diff: ");
+    Serial.println(min_diff, DEC);
+
+    return ret + ((min_diff < 999) ?
+        String(min_diff, DEC) + String("min") :
+        String(min_diff / 60, DEC) + String("hr"));
 }

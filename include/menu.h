@@ -76,13 +76,9 @@ class MenuLine
         // Returns true if, after this press, it is giving control back to the menu.
         MENU_CONTROL react_to_menu_input(MENU_INPUT_t input);
         // Get the string this menu line should currently be displaying as
-        // If the function returns true, that means the string has changed since it was last requested,
-        // and the display should be updated, if this line is on the screen
-        bool get_str(String **arg_str);
+        void get_str(String **arg_str);
 
     private:
-        // Whether str_display string has been updaed since its underlying data has changed.
-        bool is_str_and_data_desynced;
         // The string this line is currently displayed as.
         String str_display;
         // The function that should be used to used to convert this menu line to a string.
