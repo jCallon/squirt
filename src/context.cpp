@@ -7,7 +7,6 @@
 // Define reusable tasks, interrupts, etc. //
 // ======================================= //
 
-// TODO: Is this task really necessary? Can it be absorbed into task_water?
 void task_rotate_servo(Servo *servo)
 {
     // Tasks must be implemented to never return (i.e. continuous loop)
@@ -17,19 +16,21 @@ void task_rotate_servo(Servo *servo)
         // Suspend this task until it is needed
         vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ NULL);
 
-        // Turn the servo to neutral position, wait a second, if it is not already in it
+        // TODO: Don't need to wait X seconds, can wait until servo->read is at the desired value to save time
+
+        // Turn servo to neutral position, wait for it to finish
         if (0 != servo->read())
         {
             servo->write(/* int value = */ 0);
             vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
         }
 
-        // Turn the servo to opposite of neutral position, wait a second
+        // Turn servo to 90 degrees from neutral position, wait for it to finish
         // TODO: This seems to turn a bit more than 90 degrees, calibrate it using the library?
         servo->write(/* int value = */ 90);
         vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
 
-        // Turn the servo to neutral position, wait a second
+        // Turn servo to neutral position, wait for it to finish
         servo->write(/* int value = */ 0);
         vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
 
@@ -38,45 +39,45 @@ void task_rotate_servo(Servo *servo)
     }
 }
 
-// Read the soil humidity sensor, while the humidity is below our desired threshold, add more water
 void task_water(Context *context)
 {
     // Tasks must be implemented to never return (i.e. continuous loop)
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
+    // Read the soil moisture sensor, while the soil moisture is below our desired threshold, add more water
     while(1)
     {
-        // Wait until it is the time for the next humidity check
+        // Wait until it is the time for the next moisture check
         // TODO: Is there a more efficient way to do this?
         //       Maybe have a timer task that simply resumes or notifies this task?
-        while(false == context->is_humidity_check_overdue())
+        while(false == context->is_soil_moisture_check_overdue())
         {
             // Wait 1 minute
             vTaskDelay(/* TickType_t xTicksToDelay = */ 60 * 1000);
         }
 
-        // Update context's current humidity, time last checked, and time of next check
+        // Update context's current moisture, time last checked, and time of next check
         // if we fail, oh well, not really worth waiting until it works
-        (void) context->check_humidity(/* bool update_next_humidity_check = */ true);
+        (void) context->check_soil_moisture(/* bool update_next_moisture_check = */ true);
 
-        // While we are not at our desired humidity, add more water
+        // While we are not at our desired moisture, add more water
         // TODO: Optimize the number of sensor polls needed.
-        //       1. Do, say, 10 squirts. See how much it increases the soil humidity, find the average from that sample size.
-        //       2. Poll soil humidity
+        //       1. Do, say, 10 squirts. See how much it increases the soil moisture, find the average from that sample size.
+        //       2. Poll soil moisture
         //       3. Use the earlier average to calculate how many squirts are needed. Do that many squirts.
         //       4. Repeat from 2. This reduces the number of times the sensor needs to be polled, reducing corrosion.
-        while(true == context->is_current_humidity_below_desired())
+        while(true == context->is_current_soil_moisture_below_desired())
         {
             // Trigger servo motor to squirt, wait until it finishes
             (void) context->spray(
                 /* bool in_isr = */ false,
                 /* bool is_blocking = */ true);
 
-            // Wait 5 seconds for water from squirt to soak into soil
+            // Wait for water from squirting to soak into soil
             vTaskDelay(/* TickType_t xTicksToDelay = */ pdMS_TO_TICKS(5000));
 
-            // Update reading
+            // Update context's current moisture, time last checked, and time of next check
             // if we fail, oh well, not really worth waiting until it works
-            (void) context->check_humidity(/* bool update_next_humidity_check = */ true);
+            (void) context->check_soil_moisture(/* bool update_next_moisture_check = */ true);
         }
 
         // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
@@ -109,15 +110,15 @@ Context::Context(
     // TODO: What is this and how do I un-Arduino it?
     analogSetAttenuation(ADC_11db);
 
-    // Set the humidity check frequency to a default of 1 hour
-    // TODO: get minute_humidity_check_freq from and write to persistent memory, flash?
-    minute_humidity_check_freq = 60;
+    // Set the moisture check frequency to a default of 1 hour
+    // TODO: get minute_moisture_check_freq from and write to persistent memory, flash?
+    minute_soil_moisture_check_freq = 60;
 
-    // Get the current humidity, set the desired humidity to the current
-    // TODO: get desired_humidity from and write to persistent memory, flash?
+    // Get the current moisture, set the desired moisture to the current
+    // TODO: get desired_moisture from and write to persistent memory, flash?
     // TODO: is this being called before esp_timer_early_init?
-    check_humidity(/* bool move_time_next_humidity_check = */ true);
-    desired_humidity = current_humidity;
+    check_soil_moisture(/* bool move_time_next_moisture_check = */ true);
+    desired_soil_moisture = current_soil_moisture;
 
     // Create task to rotate servo motor (it can take several seconds)
     // TODO: Look into static memory allocation instead?
@@ -158,38 +159,40 @@ Context::Context(
     configASSERT(water_task_handle);
 }
 
-bool Context::is_humidity_check_overdue()
+bool Context::is_soil_moisture_check_overdue()
 {
     // If the time of the next check is after the current time, we're overdue
     CONTEXT_LOCK(/* RET_VAL = */ false);
-    bool is_overdue = time(/* time_t *_timer = */ nullptr) >= time_next_humidity_check;
+    bool is_overdue = time(/* time_t *_timer = */ nullptr) >= time_next_soil_moisture_check;
     CONTEXT_UNLOCK();
 
     // Return result of check
     return is_overdue;
 }
 
-bool Context::is_current_humidity_below_desired()
+bool Context::is_current_soil_moisture_below_desired()
 {
-    // If the current humidity is below the desired humidity, well
+    // If the current moisture is below the desired moisture, well
     CONTEXT_LOCK(/* RET_VAL = */ false);
-    bool is_current_below_desired = current_humidity < desired_humidity;
+    bool is_current_below_desired = current_soil_moisture < desired_soil_moisture;
     CONTEXT_UNLOCK();
 
     // Return result of check
     return is_current_below_desired;
 }
 
-MENU_CONTROL Context::check_humidity(bool update_next_humidity_check)
+MENU_CONTROL Context::check_soil_moisture(bool update_next_moisture_check)
 {
-    // Update context's current humidity to the analog pin, time last checked to now, and time of next check (if desired)
+    // Get the current soil moisture from the ADC pin,
+    // update the time of the last check to now,
+    // and update the time of the next check (if desired)
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
-    current_humidity = analogRead(pin_soil_moisture_sensor_in);
-    time_last_humidity_check = time(/* time_t *_timer = */ nullptr);
-    if(update_next_humidity_check)
+    current_soil_moisture = analogRead(pin_soil_moisture_sensor_in);
+    time_last_soil_moisture_check = time(/* time_t *_timer = */ nullptr);
+    if(update_next_moisture_check)
     {
-        // time_t is usally reperesented as seconds since the last epoch
-        time_next_humidity_check = time_last_humidity_check + (minute_humidity_check_freq * 60);
+        // NOTE: time_t is usually represented as seconds since the last epoch
+        time_next_soil_moisture_check = time_last_soil_moisture_check + (minute_soil_moisture_check_freq * 60);
     }
     CONTEXT_UNLOCK();
 
@@ -201,7 +204,7 @@ MENU_CONTROL Context::water()
 {
     // Run task_water by updating its wait condition
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
-    time_next_humidity_check = time(/* time_t *_timer = */ nullptr);
+    time_next_soil_moisture_check = time(/* time_t *_timer = */ nullptr);
     CONTEXT_UNLOCK();
 
     // Return control to the menu
@@ -228,6 +231,7 @@ MENU_CONTROL Context::spray(
         while(eSuspended != eTaskGetState(rotate_servo_task_handle))
         {
             // Wait half a second to check if task is suspended again
+            // TODO: Look into task notifications?
             vTaskDelay(/* TickType_t xTicksToDelay = */ pdMS_TO_TICKS(500));
         }
     }
@@ -236,29 +240,29 @@ MENU_CONTROL Context::spray(
     return MENU_CONTROL_RELEASE;
 }
 
-MENU_CONTROL Context::set_desired_humidity_to_current()
+MENU_CONTROL Context::set_desired_soil_moisture_to_current()
 {
-    // Set the desired humidity to match the last known humidity
+    // Set our desired soil moisture to match the last known soil moisture
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
-    desired_humidity = current_humidity;
+    desired_soil_moisture = current_soil_moisture;
     CONTEXT_UNLOCK();
 
     // Return control to the menu
     return MENU_CONTROL_RELEASE;
 }
 
-MENU_CONTROL Context::add_minute_humidity_check_freq(int num_minutes)
+MENU_CONTROL Context::add_minute_soil_moisture_check_freq(int num_minutes)
 {
-    // Alter the humidity check frequenecy
+    // Alter the moisture check frequenecy
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_KEEP);
-    minute_humidity_check_freq += num_minutes;
+    minute_soil_moisture_check_freq += num_minutes;
     CONTEXT_UNLOCK();
 
     // Do not return control to the menu
     return MENU_CONTROL_KEEP;
 }
 
-String Context::str_current_humidity()
+String Context::str_current_soil_moisture()
 {
     // -------------------- //
     //   Current X: 65535   //
@@ -266,13 +270,13 @@ String Context::str_current_humidity()
     String ret = String("Current X: ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    uint16_t cpy = current_humidity;
+    uint16_t cpy = current_soil_moisture;
     CONTEXT_UNLOCK();
 
     return ret + String(cpy, DEC);
 }
 
-String Context::str_desired_humidity()
+String Context::str_desired_soil_moisture()
 {
     // -------------------- //
     //   Desired X: 65535   //
@@ -280,13 +284,13 @@ String Context::str_desired_humidity()
     String ret = String("Desired X: ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    uint16_t cpy = desired_humidity;
+    uint16_t cpy = desired_soil_moisture;
     CONTEXT_UNLOCK();
 
     return ret + String(cpy, DEC);
 }
 
-String Context::str_minute_humidity_check_freq()
+String Context::str_minute_soil_moisture_check_freq()
 {
     // -------------------- //
     //   X freq: 100 min    //
@@ -294,13 +298,13 @@ String Context::str_minute_humidity_check_freq()
     String ret = String("X freq: ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    uint32_t cpy = minute_humidity_check_freq;
+    uint32_t cpy = minute_soil_moisture_check_freq;
     CONTEXT_UNLOCK();
 
     return ret + String(cpy, DEC) + String(" min");
 }
 
-String Context::str_time_last_humidity_check()
+String Context::str_time_last_soil_moisture_check()
 {
     // -------------------- //
     //   X read: 999min ago //
@@ -312,12 +316,10 @@ String Context::str_time_last_humidity_check()
     String ret = String("X read: ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    time_t cpy = time_last_humidity_check;
+    time_t cpy = time_last_soil_moisture_check;
     CONTEXT_UNLOCK();
 
-    // The time difference in minutes is:
-    // (current time - time of last check) * (1 second / 1000 milliseconds)
-    // TODO: How does the ESP32 round its integer math?
+    // The time difference in minutes is: (current time - time of last check) * (1 minute / 60 seconds)
     uint64_t min_diff = (time(/* time_t *_timer = */ nullptr) - cpy) / 60;
 
     return ret + ((min_diff < 999) ?
@@ -325,7 +327,7 @@ String Context::str_time_last_humidity_check()
         String(min_diff / 60, DEC) + String("hr ago"));
 }
 
-String Context::str_time_next_humidity_check()
+String Context::str_time_next_soil_moisture_check()
 {
     // -------------------- //
     //   Next X: in 999min  //
@@ -337,12 +339,10 @@ String Context::str_time_next_humidity_check()
     String ret = String("Next X: in ");
 
     CONTEXT_LOCK(/* RET_VAL = */ ret);
-    time_t cpy = time_next_humidity_check;
+    time_t cpy = time_next_soil_moisture_check;
     CONTEXT_UNLOCK();
 
-    // The time difference in minutes is:
-    // (time of next check - current time) * (1 second / 1000 milliseconds) * (1 minute / 60 seconds)
-    // TODO: How does the ESP32 round its integer math?
+    // The time difference in minutes is: (time of next check - current time) * (1 minute / 60 seconds)
     uint64_t min_diff = (cpy - time(/* time_t *_timer = */ nullptr)) / 60;
 
     return ret + ((min_diff < 999) ?

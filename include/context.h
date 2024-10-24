@@ -38,65 +38,70 @@ class Context
             int arg_pin_servo_out,
             gpio_num_t arg_pin_soil_moisture_sensor_in);
 
-        // Get whether we are overdue for a humidity check
-        bool is_humidity_check_overdue();
-        // Get whether the current humidity, at the time of the last check_humidity(), is below desired_humidity
-        bool is_current_humidity_below_desired();
-        // Poll the humidity sensor, update context with its reading,
-        // the time of its reading, and when the next reading should be
-        MENU_CONTROL check_humidity(bool update_next_humidity_check);
-        // Start task_water, telling the servo to move many times until the desired humidity is reached
+        // Get whether we are overdue for a soil moisture check
+        bool is_soil_moisture_check_overdue();
+        // Get whether the current soil moisture, from the last check_soil_moisture(), is below our desired soil moisture
+        bool is_current_soil_moisture_below_desired();
+
+        // Poll the soil moisture sensor, update the context with its reading, the time it was taken, and when it should next be taken
+        MENU_CONTROL check_soil_moisture(bool update_next_soil_moisture_check);
+
+        // Trigger water_task_handle, telling the servo to move many times until our desired soil moisture is reached
         MENU_CONTROL water();
-        // Start task_rotate_servo, telling the servo to move once
+        // Trigger rotate_servo_task_handle, telling the servo to move once
         MENU_CONTROL spray(
             bool in_isr,
             bool is_blocking);
 
-        // Menu functions
+        // Menu functions //
         // TODO: Is there a better way to do this? Arguments? Lambdas?
 
-        // Set the desired humidity to the current humidity
-        MENU_CONTROL set_desired_humidity_to_current();
-        // Add one to minute_humidity_check_freq, update time_next_humidity_check,
-        MENU_CONTROL add_minute_humidity_check_freq(int num_minutes);
-        // Convert current_humidity into a human-readable string
-        String str_current_humidity();
-        // Convert desired_humidity into a human-readable string
-        String str_desired_humidity();
-        // Convert minute_humidity_check_freq into a human-readable string
-        String str_minute_humidity_check_freq();
-        // Convert time_last_humidity_check into a human-readable string
-        String str_time_last_humidity_check();
-        // Convert time_next_humidity_check into a human-readable string
-        String str_time_next_humidity_check();
+        // Set desired_soil_moisture to current_soil_moisture
+        MENU_CONTROL set_desired_soil_moisture_to_current();
+        // Add num_minutes to minute_moisture_check_freq, update time_next_moisture_check
+        MENU_CONTROL add_minute_soil_moisture_check_freq(int num_minutes);
+
+        // Get current_soil_moisture as a human-readable formatted string
+        String str_current_soil_moisture();
+        // Get desired_soil_moisture as a human-readable formatted string
+        String str_desired_soil_moisture();
+        // Get minute_soil_moisture_check_freq as a human-readable formatted string
+        String str_minute_soil_moisture_check_freq();
+        // Get time_last_soil_moisture_check as a human-readable formatted string
+        String str_time_last_soil_moisture_check();
+        // Get time_next_soil_moisture_check as a human-readable formatted string
+        String str_time_next_soil_moisture_check();
 
     private:
         // A mutex to keep updating all members of this class thread-safe
+        // Easier, but slower to have one mutex for all members than one for each
         SemaphoreHandle_t mutex_handle;
+
+        // A handle to a task that periodically checks the soil moisture, adds water when below our desired moisture, see: task_water
+        TaskHandle_t water_task_handle;
+        // A handle to a task that can be used to rotate the servo motor, see: task_rotate_servo
+        TaskHandle_t rotate_servo_task_handle;
+
         // A handle to the servo motor
         Servo servo;
-        // A handle to a task that can be used to rotate the servo motor
-        TaskHandle_t rotate_servo_task_handle;
-        // The analog-supporting GPIO pin that reads from the soil moisture sensor
+        // The ADC (Analog to Digital Converter) supporting GPIO pin that reads the soil moisture sensor output
         gpio_num_t pin_soil_moisture_sensor_in;
-        // A handle to a task that uses rotate_servo_task_handle to get to desired_humidity
-        TaskHandle_t water_task_handle;
-        // When the humidity sensor was last checked, what its reading was
-        uint16_t current_humidity;
-        // When the humidity sensor is next checked, what to make the humidity at or above
-        uint16_t desired_humidity;
-        // How often to check the current humidity, in minutes
-        uint32_t minute_humidity_check_freq;
-        // The time when the humidity was last checked
-        time_t time_last_humidity_check;
-        // The time when the humidity should next be checked
-        time_t time_next_humidity_check;
+
+        // When the soil moisture sensor was last checked, what its reading was
+        uint16_t current_soil_moisture;
+        // When next watering, what to make the soil moisture at or above
+        uint16_t desired_soil_moisture;
+        // How often to check the soil moisture, in minutes
+        uint32_t minute_soil_moisture_check_freq;
+        // The time when the soil moisture was last checked
+        time_t time_last_soil_moisture_check;
+        // The time when the soil moisture should be next checked
+        time_t time_next_soil_moisture_check;
 };
 
-// Define a task for if you want to rotate the servo
+// Define a task for rotating a servo to neutral, an angle, and back
 void task_rotate_servo(Servo *servo);
-
-// Define a task for if you want to reach a desired humidity
+// Define a task for periodically checking, then adding water if soil moisture is below desired
 void task_water(Context *context);
 
 #endif // __CONTEXT_H__

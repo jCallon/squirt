@@ -48,44 +48,44 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
 {
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_current_humidity(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_current_soil_moisture(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
-        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.check_humidity(/* bool move_time_next_humidity_check = */ false); },
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.check_soil_moisture(/* bool move_time_next_moisture_check = */ false); },
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_desired_humidity(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_desired_soil_moisture(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
-        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.set_desired_humidity_to_current(); },
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.set_desired_soil_moisture_to_current(); },
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_time_last_humidity_check(); },
-        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
-        /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
-        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
-    },
-    {
-        /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_time_next_humidity_check(); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_time_last_soil_moisture_check(); },
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {
         /* String str_display = */ String(""),
-        /* String (*arg_func_to_str)() = */ []() { return context.str_minute_humidity_check_freq(); },
-        /* MENU_CONTROL (*arg_func_on_up)() = */ []() { return context.add_minute_humidity_check_freq(/* int num_minutes = */ 5); },
+        /* String (*arg_func_to_str)() = */ []() { return context.str_time_next_soil_moisture_check(); },
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
-        /* MENU_CONTROL (*arg_func_on_down)() = */ []() {  return context.add_minute_humidity_check_freq(/* int num_minutes = */ -5); }
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
+    },
+    {
+        /* String str_display = */ String(""),
+        /* String (*arg_func_to_str)() = */ []() { return context.str_minute_soil_moisture_check_freq(); },
+        /* MENU_CONTROL (*arg_func_on_up)() = */ []() { return context.add_minute_soil_moisture_check_freq(/* int num_minutes = */ 5); },
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_down)() = */ []() {  return context.add_minute_soil_moisture_check_freq(/* int num_minutes = */ -5); }
     },
     {
         /* String str_display = */ String("X now"),
         /* String (*arg_func_to_str)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
-        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.check_humidity(/* bool move_time_next_humidity_check = */ true); },
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.check_soil_moisture(/* bool move_time_next_moisture_check = */ true); },
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     },
     {

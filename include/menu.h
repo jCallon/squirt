@@ -54,7 +54,7 @@ LiquidCrystal_I2C *get_display();
 // Get the handle of the task that reads the menu input queue
 TaskHandle_t get_read_menu_input_queue_task_handle();
 
-// TODO: comment
+// When a function is called from a Menu, use this return type to signal what should happen after it finishes
 typedef bool MENU_CONTROL;
 // Stay in sub-menu after finishing
 #define MENU_CONTROL_KEEP true
