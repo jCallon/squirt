@@ -9,32 +9,44 @@
 
 void task_rotate_servo(Servo *servo)
 {
+    // I've found with the API I'm using, if the servo is not written to first, its first read value will be garbage
+    servo->write(/* int value = */ 0);
+
     // Tasks must be implemented to never return (i.e. continuous loop)
     // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html
+    // TODO: This seems to turn a bit more than 90 degrees, calibrate it using the library?
+    const int angles[] = {0, 90, 0};
+    const size_t num_angle = sizeof(angles) / sizeof(*angles);
+    size_t angles_i = 0;
+    int angle_delta = 0;
     while(1)
     {
         // Suspend this task until it is needed
         vTaskSuspend(/* TaskHandle_t xTaskToSuspend = */ NULL);
 
-        // TODO: Don't need to wait X seconds, can wait until servo->read is at the desired value to save time
-
-        // Turn servo to neutral position, wait for it to finish
-        if (0 != servo->read())
+        // For every angle we want to reach...
+        for(angles_i = 0; angles_i < num_angle; ++angles_i)
         {
-            servo->write(/* int value = */ 0);
-            vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
+            // If the angle is already at what we want, don't need to do anything
+            angle_delta = abs(servo->read() - angles[angles_i]);
+            if(0 == angle_delta)
+            {
+                continue;
+            }
+
+            // Tell the servo to go to a certain angle, wait until it reaches it or timeout
+            // NOTE: angle_delta is used as a timeout here, and assumes 1 second = 100 degrees in an ideal case.
+            //       It gives 2x that amount of time to be lenient to bad cases.
+            //       100ms = .1s .1s * 100deg = 10deg, 10deg / 2 = 5deg
+            servo->write(/* int value = */ angles[angles_i]);
+            do
+            {
+                vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(100));
+                angle_delta -= 5;
+            } while ((angle_delta > 0) && (servo->read() != angles[angles_i]));
         }
 
-        // Turn servo to 90 degrees from neutral position, wait for it to finish
-        // TODO: This seems to turn a bit more than 90 degrees, calibrate it using the library?
-        servo->write(/* int value = */ 90);
-        vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
-
-        // Turn servo to neutral position, wait for it to finish
-        servo->write(/* int value = */ 0);
-        vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
-
-        // 24OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 272
+        // 25OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 256
         PRINT_STACK_USAGE();
     }
 }
