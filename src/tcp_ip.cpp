@@ -124,7 +124,7 @@ void task_read_ip_packets()
             }
         }
 
-        // 19SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 428
+        // 24OCT2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 420
         PRINT_STACK_USAGE();
     }
 }

@@ -34,7 +34,7 @@ void task_rotate_servo(Servo *servo)
         servo->write(/* int value = */ 0);
         vTaskDelay(/* const TickType_t xTicksToDelay = */ pdMS_TO_TICKS(2000));
 
-        // 19SEP2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 352
+        // 24OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 272
         PRINT_STACK_USAGE();
     }
 }
@@ -80,7 +80,7 @@ void task_water(Context *context)
             (void) context->check_soil_moisture(/* bool update_next_moisture_check = */ true);
         }
 
-        // 24AUG2024: usStackDepth = 2048, uxTaskGetHighWaterMark = ???
+        // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 1232
         PRINT_STACK_USAGE();
     }
 }
@@ -173,8 +173,11 @@ bool Context::is_soil_moisture_check_overdue()
 bool Context::is_current_soil_moisture_below_desired()
 {
     // If the current moisture is below the desired moisture, well
+    // NOTE: These sensors give a LOWER value when the soil is wetter.
+    //       So, a higher value means it is dryer.
+    //       The check here is whether the current soil humidity is dryer than what we want.
     CONTEXT_LOCK(/* RET_VAL = */ false);
-    bool is_current_below_desired = current_soil_moisture < desired_soil_moisture;
+    bool is_current_below_desired = current_soil_moisture > desired_soil_moisture;
     CONTEXT_UNLOCK();
 
     // Return result of check
