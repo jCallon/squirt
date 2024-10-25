@@ -93,7 +93,7 @@ void init_buttons()
         // A descriptive name for the task. This is mainly used to facilitate debugging. Max length defined by configMAX_TASK_NAME_LEN - default is 16.
         /* const char *const pcName = */ "toggle_sleep",
         // The size of the task stack specified as the NUMBER OF BYTES. Note that this differs from vanilla FreeRTOS.
-        /* const configSTACK_DEPT_TYPE usStackDepth = */ 1024 + 512,
+        /* const configSTACK_DEPT_TYPE usStackDepth = */ 2048,
         // Pointer that will be used as the parameter for the task being created.
         /* void *const pvParameters = */ NULL,
         // The priority at which the task should run.
@@ -182,7 +182,8 @@ static void task_toggle_sleep_mode()
 
         is_asleep = !is_asleep;
 
-        // 17SEP2024: usStackDepth = 1024 + 512, uxTaskGetHighWaterMark = 156
+        // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 796
+        // TODO: lower the stack usage, 1024 + 512 was too low and causing issues
         PRINT_STACK_USAGE();
     }
 }
