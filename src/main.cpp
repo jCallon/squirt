@@ -17,6 +17,8 @@
 #include "menu.h"
 // Include custom TCP/IP API
 #include "tcp_ip.h"
+// Include custom storage API
+#include "storage.h"
 
 // =========================== //
 // Initialize and start device //
@@ -32,8 +34,12 @@ void setup()
     while(!Serial);
 #endif
 
-    // Initialze menu and its input queue/task
+    // Intialize storage, if it went wrong, don't care enough to crash
+    (void) storage_init();
+
+    // Initialize menu and its input queue/task
     init_menu();
+
     // Initialize GPIO buttons and their interrupts
     init_buttons();
 
