@@ -123,9 +123,6 @@ Context::Context(
     // TODO: What is this and how do I un-Arduino it?
     analogSetAttenuation(ADC_11db);
 
-    // TODO: delay all storage access until after storage_init,
-    //       or call storage_init if it has not already been called from within here
-
     // Get a handle to the NVS namespace for this context
     nvs_namespace = arg_nvs_namespace;
     nvs_handle = 0;
@@ -297,7 +294,7 @@ MENU_CONTROL Context::set_desired_soil_moisture_to_current()
     // Set our desired soil moisture to match the last known soil moisture, in memory and NVS
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
     desired_soil_moisture = current_soil_moisture;
-    (void) storage_get(
+    (void) storage_set(
         /* nvs_handle_t nvs_handle = */ nvs_handle,
         /* char *key = */ CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE,
         /* void *value = */ &desired_soil_moisture,
