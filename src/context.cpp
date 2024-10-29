@@ -46,7 +46,7 @@ void task_rotate_servo(Servo *servo)
             } while ((angle_delta > 0) && (servo->read() != angles[angles_i]));
         }
 
-        // 25OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 256
+        // 29OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 252
         PRINT_STACK_USAGE();
     }
 }
@@ -93,6 +93,7 @@ void task_water(Context *context)
         }
 
         // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 1232
+        // TODO: Update this for the "Add NVS" PR.
         PRINT_STACK_USAGE();
     }
 }
@@ -104,7 +105,8 @@ void task_water(Context *context)
 Context::Context(
     StaticSemaphore_t *arg_mutex_buffer,
     int arg_pin_servo_out,
-    gpio_num_t arg_pin_soil_moisture_sensor_in)
+    gpio_num_t arg_pin_soil_moisture_sensor_in,
+    char *arg_nvs_namespace)
 {
     // Create mutex, open it for grabbing
     // NOTE: "Mutex type semaphores cannot be used from within interrupt service routines."
@@ -122,15 +124,48 @@ Context::Context(
     // TODO: What is this and how do I un-Arduino it?
     analogSetAttenuation(ADC_11db);
 
-    // Set the moisture check frequency to a default of 1 hour
-    // TODO: get minute_moisture_check_freq from and write to persistent memory, flash?
-    minute_soil_moisture_check_freq = 60;
+    // Get a handle to the NVS namespace for this context
+    nvs_namespace = arg_nvs_namespace;
+    nvs_handle = 0;
+    (void) storage_init(/* bool reinit = */ false);
+    (void) storage_open(/* char *name = */ nvs_namespace,
+        /* nvs_handle_t *nvs_handle = */ &nvs_handle);
 
-    // Get the current moisture, set the desired moisture to the current
-    // TODO: get desired_moisture from and write to persistent memory, flash?
+    // Get minute_moisture_check_freq from NVS
+    if(false == storage_get(
+        /* nvs_handle_t nvs_handle = */ nvs_handle,
+        /* char *key = */ CONTEXT_NVS_KEY_MINUTE_SOIL_MOISTURE_CHECK_FREQ,
+        /* void *value = */ &minute_soil_moisture_check_freq,
+        /* size_t num_value_bytes = */ sizeof(minute_soil_moisture_check_freq)))
+    {
+        // Set the default moisture check frequency as 1 hour
+        minute_soil_moisture_check_freq = 60;
+        (void) storage_set(
+            /* nvs_handle_t nvs_handle = */ nvs_handle,
+            /* char *key = */ CONTEXT_NVS_KEY_MINUTE_SOIL_MOISTURE_CHECK_FREQ,
+            /* void *value = */ &minute_soil_moisture_check_freq,
+            /* size_t num_value_bytes = */ sizeof(minute_soil_moisture_check_freq));
+    }
+
+    // Get the current soil moisture
     // TODO: is this being called before esp_timer_early_init?
     check_soil_moisture(/* bool move_time_next_moisture_check = */ true);
-    desired_soil_moisture = current_soil_moisture;
+
+    // Get desired_soil_moisture from NVS
+    if(false == storage_get(
+        /* nvs_handle_t nvs_handle = */ nvs_handle,
+        /* char *key = */ CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE,
+        /* void *value = */ &desired_soil_moisture,
+        /* size_t num_value_bytes = */ sizeof(desired_soil_moisture)))
+    {
+        // Set the default desired soil moisture as the current soil moisture
+        desired_soil_moisture = current_soil_moisture;
+        (void) storage_set(
+            /* nvs_handle_t nvs_handle = */ nvs_handle,
+            /* char *key = */ CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE,
+            /* void *value = */ &desired_soil_moisture,
+            /* size_t num_value_bytes = */ sizeof(desired_soil_moisture));
+    }
 
     // Create task to rotate servo motor (it can take several seconds)
     // TODO: Look into static memory allocation instead?
@@ -257,9 +292,14 @@ MENU_CONTROL Context::spray(
 
 MENU_CONTROL Context::set_desired_soil_moisture_to_current()
 {
-    // Set our desired soil moisture to match the last known soil moisture
+    // Set our desired soil moisture to match the last known soil moisture, in memory and NVS
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_RELEASE);
     desired_soil_moisture = current_soil_moisture;
+    (void) storage_set(
+        /* nvs_handle_t nvs_handle = */ nvs_handle,
+        /* char *key = */ CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE,
+        /* void *value = */ &desired_soil_moisture,
+        /* size_t num_value_bytes = */ sizeof(desired_soil_moisture));
     CONTEXT_UNLOCK();
 
     // Return control to the menu
@@ -268,9 +308,14 @@ MENU_CONTROL Context::set_desired_soil_moisture_to_current()
 
 MENU_CONTROL Context::add_minute_soil_moisture_check_freq(int num_minutes)
 {
-    // Alter the moisture check frequenecy
+    // Alter the moisture check frequenecy in memory and NVS
     CONTEXT_LOCK(/* RET_VAL = */ MENU_CONTROL_KEEP);
     minute_soil_moisture_check_freq += num_minutes;
+    (void) storage_set(
+        /* nvs_handle_t nvs_handle = */ nvs_handle,
+        /* char *key = */ CONTEXT_NVS_KEY_MINUTE_SOIL_MOISTURE_CHECK_FREQ,
+        /* void *value = */ &minute_soil_moisture_check_freq,
+        /* size_t num_value_bytes = */ sizeof(minute_soil_moisture_check_freq));
     CONTEXT_UNLOCK();
 
     // Do not return control to the menu

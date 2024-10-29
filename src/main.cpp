@@ -17,6 +17,8 @@
 #include "menu.h"
 // Include custom TCP/IP API
 #include "tcp_ip.h"
+// Include custom storage API
+#include "storage.h"
 
 // =========================== //
 // Initialize and start device //
@@ -32,16 +34,19 @@ void setup()
     while(!Serial);
 #endif
 
-    // Initialze menu and its input queue/task
+    // Initialize menu and its input queue/task
     init_menu();
+
     // Initialize GPIO buttons and their interrupts
     init_buttons();
 
 #if WIFI_ENABLED
+    // Connect to WiFi AP
     if(true == wifi_start(
         /* char *wifi_ssid = */ WIFI_SSID,
         /* char *wifi_password = */ WIFI_PASSWORD))
     {
+        // Connect to TCP server
         tcp_start(
             /* uint32_t tcp_server_ipv4_addr = */ TCP_SERVER_IPV4_ADDR,
             /* uint32_t tcp_server_port = */ TCP_SERVER_PORT);

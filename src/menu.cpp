@@ -12,7 +12,7 @@
 // ======================= //
 
 // Define the number of lines in menu_lines
-#define NUM_MENU_LINES 7
+#define NUM_MENU_LINES 8
 
 // ======================= //
 // Instantiate useful data //
@@ -38,7 +38,8 @@ StaticSemaphore_t context_mutex_buffer;
 static Context context = { 
     /* StaticSemaphore_t *mutex_buffer = */ &context_mutex_buffer,
     /* int pin_servo_out = */ PIN_SERVO_OUT,
-    /* gpio_num_t arg_pin_soil_moisture_sensor_in = */ PIN_SOIL_MOISTURE_SENSOR_IN
+    /* gpio_num_t arg_pin_soil_moisture_sensor_in = */ PIN_SOIL_MOISTURE_SENSOR_IN,
+    /* char *arg_nvs_namespace = */ "context"
 };
 
 // Define the lines within the menu
@@ -94,6 +95,16 @@ static MenuLine menu_lines[NUM_MENU_LINES] =
         /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
         /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { return context.spray(/* bool in_isr = */ false,
             /* bool is_blocking = */ false); },
+        /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
+    },
+    {
+        /* String str_display = */ String("Wipe NVS"),
+        /* String (*arg_func_to_str)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_up)() = */ nullptr,
+        /* MENU_CONTROL (*arg_func_on_confirm)() = */ []() { 
+            storage_wipe(/* bool reset = */ true); 
+            return MENU_CONTROL_RELEASE;
+        },
         /* MENU_CONTROL (*arg_func_on_down)() = */ nullptr
     }
     // TODO: have menu to show if successfully connected to WiFi and TCP
