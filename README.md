@@ -33,6 +33,7 @@ TODO: Can optimize by keeping track of how much one squirt increases the moistur
 ### Diagram
 
 TODO: Add diagram showing layout and wiring of peripherals.
+!!!
 
 ### List
 | Quantity | Item | Purpose |
