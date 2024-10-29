@@ -12,6 +12,8 @@
 
 // Include custom Menu class implementation
 #include "menu.h"
+// Include custom storage API
+#include "storage.h"
 
 // Define what pins are mapped to what peripherals
 //#define PIN_SERVO_NEG GND
@@ -28,6 +30,9 @@
 // Return mutex so other threads can read and write to context members again
 #define CONTEXT_UNLOCK() xSemaphoreGive(/* xSemaphore = */ mutex_handle);
 
+#define CONTEXT_NVS_KEY_MINUTE_SOIL_MOISTURE_CHECK_FREQ "read_freq"
+#define CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE "desired_moisture"
+
 // The overall state the menu display and the sensors operate on
 class Context
 {
@@ -36,7 +41,8 @@ class Context
         Context(
             StaticSemaphore_t *arg_mutex_buffer, 
             int arg_pin_servo_out,
-            gpio_num_t arg_pin_soil_moisture_sensor_in);
+            gpio_num_t arg_pin_soil_moisture_sensor_in,
+            char *arg_nvs_namespace);
 
         // Get whether we are overdue for a soil moisture check
         bool is_soil_moisture_check_overdue();
@@ -86,6 +92,11 @@ class Context
         Servo servo;
         // The ADC (Analog to Digital Converter) supporting GPIO pin that reads the soil moisture sensor output
         gpio_num_t pin_soil_moisture_sensor_in;
+
+        // The namespace within NVS this Context maps to
+        char *nvs_namespace;
+        // The handle to access nvs_namespace within NVS
+        nvs_handle_t nvs_handle;
 
         // When the soil moisture sensor was last checked, what its reading was
         uint16_t current_soil_moisture;

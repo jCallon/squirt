@@ -3,6 +3,13 @@
 // Include custom debug macros and compile flags
 #include "flags.h"
 
+// This storage API is unencrpyted.
+// NOTE: NVS is not directly compatible with the ESP32 flash encryption system.
+//       However, data can still be stored in encrypted form if NVS encryption
+//       is used together with ESP32 flash encryption.
+//       Please refer to NVS Encryption for more details.
+//       NVS Encryption: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_encryption.html
+
 bool storage_init()
 {
     // Initilaize NVS, if erasing first if necessary
@@ -39,6 +46,17 @@ void storage_close(nvs_handle_t *nvs_handle)
 {
     nvs_close(/* nvs_handle_t handle = */ *nvs_handle);
     *nvs_handle = 0;
+}
+
+bool storage_wipe(bool reset)
+{
+    esp_err_t status = ESP_OK;
+    ESP_ERROR_RETURN_FALSE_IF_FAILED(status, nvs_flash_erase());
+    if(true == reset)
+    {
+        esp_restart();
+    }
+    return true;
 }
 
 bool storage_get(
