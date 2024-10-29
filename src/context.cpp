@@ -46,7 +46,7 @@ void task_rotate_servo(Servo *servo)
             } while ((angle_delta > 0) && (servo->read() != angles[angles_i]));
         }
 
-        // 25OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 256
+        // 29OCT2024: usStackDepth = 1024, uxTaskGetHighWaterMark = 252
         PRINT_STACK_USAGE();
     }
 }
@@ -93,6 +93,7 @@ void task_water(Context *context)
         }
 
         // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 1232
+        // TODO: Update this for the "Add NVS" PR.
         PRINT_STACK_USAGE();
     }
 }
