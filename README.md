@@ -33,7 +33,8 @@ TODO: Can optimize by keeping track of how much one squirt increases the moistur
 ### Diagram
 
 If this PNG file is not high enough quality for you, please see its SVG file.
-![An image of the wiring diagram, made based on the source code](https://github.com/jcallon/squirt/blob/main/wiring_diagram.png?raw=true)
+
+![An image of the wiring diagram, made based on the source code](https://github.com/jCallon/squirt/blob/main/wire_diagram.png?raw=true)
 
 ### List
 | Quantity | Item | Purpose |
