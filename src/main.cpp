@@ -35,7 +35,7 @@ void setup()
 #endif
 
     // Intialize storage, if it went wrong, don't care enough to crash
-    (void) storage_init();
+    (void) storage_init(/* bool reinit = */ false);
 
     // Initialize menu and its input queue/task
     init_menu();

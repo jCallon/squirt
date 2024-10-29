@@ -31,7 +31,7 @@
 #define CONTEXT_UNLOCK() xSemaphoreGive(/* xSemaphore = */ mutex_handle);
 
 #define CONTEXT_NVS_KEY_MINUTE_SOIL_MOISTURE_CHECK_FREQ "read_freq"
-#define CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE "desired_moisture"
+#define CONTEXT_NVS_KEY_DESIRED_SOIL_MOISTURE "target_moist"
 
 // The overall state the menu display and the sensors operate on
 class Context

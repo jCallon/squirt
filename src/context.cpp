@@ -129,6 +129,7 @@ Context::Context(
     // Get a handle to the NVS namespace for this context
     nvs_namespace = arg_nvs_namespace;
     nvs_handle = 0;
+    (void) storage_init(/* bool reinit = */ false);
     (void) storage_open(/* char *name = */ nvs_namespace,
         /* nvs_handle_t *nvs_handle = */ &nvs_handle);
 
@@ -141,6 +142,11 @@ Context::Context(
     {
         // Set the default moisture check frequency as 1 hour
         minute_soil_moisture_check_freq = 60;
+        (void) storage_set(
+            /* nvs_handle_t nvs_handle = */ nvs_handle,
+            /* char *key = */ CONTEXT_NVS_KEY_MINUTE_SOIL_MOISTURE_CHECK_FREQ,
+            /* void *value = */ &minute_soil_moisture_check_freq,
+            /* size_t num_value_bytes = */ sizeof(minute_soil_moisture_check_freq));
     }
 
     // Get the current soil moisture

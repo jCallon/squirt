@@ -10,8 +10,20 @@
 //       Please refer to NVS Encryption for more details.
 //       NVS Encryption: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_encryption.html
 
-bool storage_init()
+// NOTE: May want to add lock around API if it's used across threads,
+//       not necessary right now.
+
+// Whether storage has been successfully initialized,
+// so different threads can make sure the API is initialized in any order
+bool is_init = false;
+
+bool storage_init(bool reinit)
 {
+    if((false == reinit) && (true == is_init))
+    {
+        return true;
+    }
+
     // Initilaize NVS, if erasing first if necessary
     esp_err_t status = nvs_flash_init();
     if ((ESP_ERR_NVS_NO_FREE_PAGES == status) || (ESP_ERR_NVS_NEW_VERSION_FOUND == status))
@@ -23,6 +35,7 @@ bool storage_init()
     ESP_ERROR_RETURN_FALSE_IF_FAILED(status, status);
 
     // Return success
+    is_init = true;
     return true;
 }
 
@@ -52,6 +65,7 @@ bool storage_wipe(bool reset)
 {
     esp_err_t status = ESP_OK;
     ESP_ERROR_RETURN_FALSE_IF_FAILED(status, nvs_flash_erase());
+    is_init = false;
     if(true == reset)
     {
         esp_restart();

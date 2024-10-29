@@ -8,7 +8,7 @@
 #include "nvs_flash.h"
 
 // Intialize NVS, wipe if it has an issue or there's a new version
-bool storage_init();
+bool storage_init(bool reinit);
 // Get a handle to a namespace within NVS
 bool storage_open(
     char *name,
