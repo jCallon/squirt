@@ -92,8 +92,7 @@ void task_water(Context *context)
             (void) context->check_soil_moisture(/* bool update_next_moisture_check = */ true);
         }
 
-        // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 1232
-        // TODO: Update this for the "Add NVS" PR.
+        // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 1220
         PRINT_STACK_USAGE();
     }
 }

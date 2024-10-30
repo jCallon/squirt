@@ -182,7 +182,7 @@ static void task_toggle_sleep_mode()
 
         is_asleep = !is_asleep;
 
-        // 24OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 796
+        // 29OCT2024: usStackDepth = 2048, uxTaskGetHighWaterMark = 796
         // TODO: lower the stack usage, 1024 + 512 was too low and causing issues
         PRINT_STACK_USAGE();
     }
