@@ -6,6 +6,10 @@ Keep soil above a certain moisture.
 
 An embedded C++ application written for ESP32 and FreeRTOS.
 
+A Web GUI is available at index.html. Simply double click it, once downloaded, to open in your web-browser.
+TODO: plain HTML version
+      show IP address and port on menu
+
 TODO: add GIF of it running and its healthy plant.
 
 ## Basic Flow
